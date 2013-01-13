@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Erlyvideo blog]]></title>
-  <link href="http://erlyvideo.github.com/atom.xml" rel="self"/>
-  <link href="http://erlyvideo.github.com/"/>
-  <updated>2013-01-14T01:06:56+04:00</updated>
-  <id>http://erlyvideo.github.com/</id>
+  <link href="http://blog.erlyvideo.org/atom.xml" rel="self"/>
+  <link href="http://blog.erlyvideo.org/"/>
+  <updated>2013-01-14T01:11:14+04:00</updated>
+  <id>http://blog.erlyvideo.org/</id>
   <author>
     <name><![CDATA[Max Lapshin]]></name>
     <email><![CDATA[max@erlyvideo.org]]></email>
@@ -15,13 +15,13 @@
   
   <entry>
     <title type="html"><![CDATA[Maintain long requests]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/05/maintain-long-requests/"/>
+    <link href="http://blog.erlyvideo.org/2013/01/05/maintain-long-requests/"/>
     <updated>2013-01-05T00:38:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/05/maintain-long-requests</id>
-    <content type="html"><![CDATA[<p>Previous chapters in this series were about <a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">fighting with overloads inside system</a>,
-<a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">dropping requests that will overload system</a>,
-<a href="http://erlyvideo.github.com/2013/01/03/deadlocks%201/">dealing with consequences of our measures</a>,
-<a href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/">making system less tied and faster</a>.</p>
+    <id>http://blog.erlyvideo.org/2013/01/05/maintain-long-requests</id>
+    <content type="html"><![CDATA[<p>Previous chapters in this series were about <a href="http://blog.erlyvideo.org/2013/01/01/overload-protection-1/">fighting with overloads inside system</a>,
+<a href="http://blog.erlyvideo.org/2013/01/02/overload-protection-2/">dropping requests that will overload system</a>,
+<a href="http://blog.erlyvideo.org/2013/01/03/deadlocks%201/">dealing with consequences of our measures</a>,
+<a href="http://blog.erlyvideo.org/2013/01/04/unobtrusive-read/">making system less tied and faster</a>.</p>
 
 <p>This last chapter will be about maintaining long user requests.</p>
 
@@ -121,10 +121,10 @@ I hope that this series of posts will help you a bit in this hard and interestin
   
   <entry>
     <title type="html"><![CDATA[Unobtrusive read]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/"/>
+    <link href="http://blog.erlyvideo.org/2013/01/04/unobtrusive-read/"/>
     <updated>2013-01-04T00:26:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/04/unobtrusive-read</id>
-    <content type="html"><![CDATA[<p>Post about <a href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/">deadlocks</a> was finished with promise to tell about other ways to remove deadlocks from system,
+    <id>http://blog.erlyvideo.org/2013/01/04/unobtrusive-read</id>
+    <content type="html"><![CDATA[<p>Post about <a href="http://blog.erlyvideo.org/2013/01/03/deadlocks-1/">deadlocks</a> was finished with promise to tell about other ways to remove deadlocks from system,
 while maintaining it responsive and keeping control of system load.</p>
 
 <p>This capter will be about unobtrusive reads: how to read data from process without affecting its performance.</p>
@@ -204,16 +204,16 @@ is blocked in status <code>write_frame_on_disk</code> and you should do somethin
 
 <p>Main idea of this capter is: block if you need other process to modify required data but don&#8217;t touch remote process at all if you need &#8220;just ask for existing data&#8221;. Mention that this method behaves badly if data does not exists. It works for already existing data.</p>
 
-<p>Last chapter of this series will be devoted to <a href="http://erlyvideo.github.com/2013/01/05/maintain-long-requests/">maintaining long user requests</a></p>
+<p>Last chapter of this series will be devoted to <a href="http://blog.erlyvideo.org/2013/01/05/maintain-long-requests/">maintaining long user requests</a></p>
 ]]></content>
   </entry>
   
   <entry>
     <title type="html"><![CDATA[Deadlocks 1]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/"/>
+    <link href="http://blog.erlyvideo.org/2013/01/03/deadlocks-1/"/>
     <updated>2013-01-03T00:17:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/03/deadlocks-1</id>
-    <content type="html"><![CDATA[<p>In <a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">previous</a> <a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">chapters</a> we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.</p>
+    <id>http://blog.erlyvideo.org/2013/01/03/deadlocks-1</id>
+    <content type="html"><![CDATA[<p>In <a href="http://blog.erlyvideo.org/2013/01/01/overload-protection-1/">previous</a> <a href="http://blog.erlyvideo.org/2013/01/02/overload-protection-2/">chapters</a> we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.</p>
 
 <p>Synchronous <code>gen_server:call</code> was claimed to be a good approach for this goal, but synchronous calls with message passing brings deadlocks.</p>
 
@@ -313,16 +313,16 @@ to transfer socket and ranch cannot do it because it waits for pid.</p>
 
 <p>This chapter is more about dealing with deadlocks, not protecting system from overload, but these topics are related.</p>
 
-<p>Next chapter will tell you about other way to untie components of your system: <a href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/">unobtrusive read</a></p>
+<p>Next chapter will tell you about other way to untie components of your system: <a href="http://blog.erlyvideo.org/2013/01/04/unobtrusive-read/">unobtrusive read</a></p>
 ]]></content>
   </entry>
   
   <entry>
     <title type="html"><![CDATA[Overload protection 2]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/"/>
+    <link href="http://blog.erlyvideo.org/2013/01/02/overload-protection-2/"/>
     <updated>2013-01-02T23:59:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/02/overload-protection-2</id>
-    <content type="html"><![CDATA[<p><a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">Previous chapter</a></p>
+    <id>http://blog.erlyvideo.org/2013/01/02/overload-protection-2</id>
+    <content type="html"><![CDATA[<p><a href="http://blog.erlyvideo.org/2013/01/01/overload-protection-1/">Previous chapter</a></p>
 
 <p>We have discussed in previous chapter that your system may experience unbalanced load in different components that can lead to
 extremely large message queues in some central processes that are accessed via asynchronous <code>gen_server:cast</code> API.</p>
@@ -356,15 +356,15 @@ that request is accepted but not handled in affordable time.</p>
 
 <h2>Deadlocks</h2>
 
-<p>By switching from <code>gen_server:cast</code> to <code>gen_Server:call</code> you will suffer from deadlocks. Read <a href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/">chapter about deadlocks</a> please.</p>
+<p>By switching from <code>gen_server:cast</code> to <code>gen_Server:call</code> you will suffer from deadlocks. Read <a href="http://blog.erlyvideo.org/2013/01/03/deadlocks-1/">chapter about deadlocks</a> please.</p>
 ]]></content>
   </entry>
   
   <entry>
     <title type="html"><![CDATA[Overload protection 1]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/"/>
+    <link href="http://blog.erlyvideo.org/2013/01/01/overload-protection-1/"/>
     <updated>2013-01-01T00:29:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/01/overload-protection-1</id>
+    <id>http://blog.erlyvideo.org/2013/01/01/overload-protection-1</id>
     <content type="html"><![CDATA[<h2>How to protect Erlang system from overload</h2>
 
 <p>Lets discuss a bit such a complicated and deep question like designing your system to be able to
@@ -428,7 +428,7 @@ incoming message queue.</p>
 <p>So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don&#8217;t let data to accumulate inside your system, use backpush mechanism to
 slow down producer. <code>gen_server:call</code> is a good example of such backpush mechanism. One client process will be limited by speed of server process.</p>
 
-<p><a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">Next chapter</a></p>
+<p><a href="http://blog.erlyvideo.org/2013/01/02/overload-protection-2/">Next chapter</a></p>
 ]]></content>
   </entry>
   

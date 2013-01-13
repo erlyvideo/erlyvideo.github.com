@@ -1,35 +1,35 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
     <url>
-        <loc>http://erlyvideo.github.com/2013/01/01/overload-protection-1/</loc>
+        <loc>http://blog.erlyvideo.org/2013/01/01/overload-protection-1/</loc>
         <lastmod>2013-01-14T00:19:09+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/2013/01/02/overload-protection-2/</loc>
+        <loc>http://blog.erlyvideo.org/2013/01/02/overload-protection-2/</loc>
         <lastmod>2013-01-14T00:19:18+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/2013/01/03/deadlocks-1/</loc>
+        <loc>http://blog.erlyvideo.org/2013/01/03/deadlocks-1/</loc>
         <lastmod>2013-01-14T00:27:08+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/2013/01/04/unobtrusive-read/</loc>
+        <loc>http://blog.erlyvideo.org/2013/01/04/unobtrusive-read/</loc>
         <lastmod>2013-01-14T00:38:59+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/2013/01/05/maintain-long-requests/</loc>
+        <loc>http://blog.erlyvideo.org/2013/01/05/maintain-long-requests/</loc>
         <lastmod>2013-01-14T01:06:08+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/blog/archives/</loc>
+        <loc>http://blog.erlyvideo.org/blog/archives/</loc>
         <lastmod>2013-01-14T01:06:08+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/</loc>
+        <loc>http://blog.erlyvideo.org/</loc>
         <lastmod>2013-01-14T01:06:08+04:00</lastmod>
     </url>
     <url>
-        <loc>http://erlyvideo.github.com/robots.txt</loc>
+        <loc>http://blog.erlyvideo.org/robots.txt</loc>
         <lastmod>2013-01-13T23:30:57+04:00</lastmod>
     </url>
 </urlset>
