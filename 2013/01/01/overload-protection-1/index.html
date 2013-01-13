@@ -19,7 +19,7 @@ survive &hellip;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">
+  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <script src="/javascripts/modernizr-2.0.js"></script>
@@ -84,7 +84,7 @@ survive &hellip;">
   
 
 
-<time datetime="2013-01-12T00:29:00+04:00" pubdate data-updated="true">Jan 12<span>th</span>, 2013</time>
+<time datetime="2013-01-01T00:29:00+04:00" pubdate data-updated="true">Jan 1<span>st</span>, 2013</time>
         
          | <a href="#disqus_thread">Comments</a>
         
@@ -156,7 +156,7 @@ incoming message queue.</p>
 <p>So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don&#8217;t let data to accumulate inside your system, use backpush mechanism to
 slow down producer. <code>gen_server:call</code> is a good example of such backpush mechanism. One client process will be limited by speed of server process.</p>
 
-<p><a href="/2013/01/12/overload-protection-1/">Next chapter</a></p>
+<p><a href="/2013/01/02/overload-protection-2/">Next chapter</a></p>
 </div>
 
 
@@ -179,7 +179,7 @@ slow down producer. <code>gen_server:call</code> is a good example of such backp
   
 
 
-<time datetime="2013-01-12T00:29:00+04:00" pubdate data-updated="true">Jan 12<span>th</span>, 2013</time>
+<time datetime="2013-01-01T00:29:00+04:00" pubdate data-updated="true">Jan 1<span>st</span>, 2013</time>
       
 
 
@@ -187,7 +187,7 @@ slow down producer. <code>gen_server:call</code> is a good example of such backp
     
       <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/12/overload-protection-1/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/12/overload-protection-1/" >Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/01/overload-protection-1/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/01/overload-protection-1/" >Tweet</a>
   
   
   <div class="g-plusone" data-size="medium"></div>
@@ -201,7 +201,7 @@ slow down producer. <code>gen_server:call</code> is a good example of such backp
     <p class="meta">
       
       
-        <a class="basic-alignment right" href="/2013/01/13/overload-protection-2/" title="Next Post: Overload protection 2">Overload protection 2 &raquo;</a>
+        <a class="basic-alignment right" href="/2013/01/02/overload-protection-2/" title="Next Post: Overload protection 2">Overload protection 2 &raquo;</a>
       
     </p>
   </footer>
@@ -222,11 +222,23 @@ slow down producer. <code>gen_server:call</code> is a good example of such backp
   <ul id="recent_posts">
     
       <li class="post">
-        <a href="/2013/01/13/overload-protection-2/">Overload protection 2</a>
+        <a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a>
       </li>
     
       <li class="post">
-        <a href="/2013/01/12/overload-protection-1/">Overload protection 1</a>
+        <a href="/2013/01/04/unobtrusive-read/">Unobtrusive read</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/02/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/01/overload-protection-1/">Overload protection 1</a>
       </li>
     
   </ul>
@@ -327,8 +339,8 @@ slow down producer. <code>gen_server:call</code> is a good example of such backp
       
         
         // var disqus_developer = 1;
-        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/12/overload-protection-1/';
-        var disqus_url = 'http://erlyvideo.github.com/2013/01/12/overload-protection-1/';
+        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/01/overload-protection-1/';
+        var disqus_url = 'http://erlyvideo.github.com/2013/01/01/overload-protection-1/';
         var disqus_script = 'embed.js';
       
     (function () {

@@ -9,7 +9,9 @@
   <meta name="author" content="Max Lapshin">
 
   
-  <meta name="description" content="Previous chapter Many clients, one server What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends &hellip;">
+  <meta name="description" content="Previous chapters in this series were about fighting with overloads inside system,
+dropping requests that will overload system,
+dealing with &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -70,7 +72,7 @@
       
   <header>
     
-      <h1 class="entry-title"><a href="/2013/01/13/overload-protection-2/">Overload Protection 2</a></h1>
+      <h1 class="entry-title"><a href="/2013/01/05/maintain-long-requests/">Maintain Long Requests</a></h1>
     
     
       <p class="meta">
@@ -86,145 +88,39 @@
   
 
 
-<time datetime="2013-01-13T23:59:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+<time datetime="2013-01-05T00:38:00+04:00" pubdate data-updated="true">Jan 5<span>th</span>, 2013</time>
         
-         | <a href="/2013/01/13/overload-protection-2/#disqus_thread">Comments</a>
+         | <a href="/2013/01/05/maintain-long-requests/#disqus_thread">Comments</a>
         
       </p>
     
   </header>
 
 
-  <div class="entry-content"><p><a href="/2013/01/12/overload-protection-1/">Previous chapter</a></p>
+  <div class="entry-content"><p>Previous chapters in this series were about <a href="/2013/01/01/overload-protection-1/">fighting with overloads inside system</a>,
+<a href="/2013/01/02/overload-protection-2/">dropping requests that will overload system</a>,
+<a href="/2013/01/03/deadlocks%201/">dealing with consequences of our measures</a>,
+<a href="/2013/01/04/unobtrusive-read/">making system less tied and faster</a>.</p>
 
-<h2>Many clients, one server</h2>
+<p>This last chapter will be about maintaining long user requests.</p>
 
-<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
-there will appear 10 000 of incoming messages in server message queue.</p>
+<p>If out load control system allows user to make a request that will consume large amount of resources, our system
+should understand that user doesn&#8217;t want to wait anymore.</p>
 
-<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
-they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
-almost with any chance to survive this storm.</p>
+<p>Here is an example: erlyvideo can export video archive as an mp4 file via HTTP request. It requires reading video twice: to build
+frame map and send frames. Two hours of video can take about 6 gigabytes, so one user request will lead to
+12 gigabytes transfer through our system. Such export task may take many seconds and user&#8217;s software may
+decide that request has failed due to timeout and restart it.</p>
 
-<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
-<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
+<p>After 10-15 restarts your system will be full of very consuming requests that are not required anymore. Lets discuss how to
+drop such requests.</p>
 
-<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
-This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
-with overloaded server: many timeouts in client processes.</p>
-
-<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
-
-<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
-that request is accepted but not handled in affordable time.</p>
-
-<h2>Deadlocks</h2>
-
-<p>By switching from <code>gen_server:cast</code> to <code>gen_server:call</code> you will face with deadlocks. Process 1 calls process 2, process 2 starts process 3, process
-3 calls process 2 and in 5 seconds all of them die with error(timeout).</p>
-
-<p>Erlyvideo2 had a good example of such deadlock-prone component. It is stream registrator. Video stream should be atomically started on demand if
-not started yet. There is playlist type of streams that requires other stream to be started.</p>
-
-<p>Client asks media_registrator to start a stream via <code>gen_server:call</code>. Media registrator looks in process list and starts new playlist stream.
-Playlist stream loads entries and asks media_registrator to start other stream, but media_registrator is busy launching this playlist stream.</p>
-
-<p>This is an example of silly deadlock which can be easily fixed but you may experience more complicated deadlocks or just simple locks.</p>
-
-<p>There are many different ways to fight them. First way is just to fix removing simultaneous calls.</p>
-
-<p>For example lets take a look at <a href="https://github.com/extend/ranch">ranch</a>. It is a pool of network connection acceptors that starts your process
-to handle network client. First your callback must return Pid of your process, than your process should receive message that socket
-ownership is transferred to a new process.</p>
-
-<p>Let&#8217;s take a look at a wrong code:</p>
-
-<figure class='code'><figcaption><span>wrong ranch callback</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="p">-</span><span class="ni">module</span><span class="p">(</span><span class="n">my_worker</span><span class="p">).</span>
-</span><span class='line'><span class="p">-</span><span class="ni">export</span><span class="p">([</span><span class="n">start_link</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span> <span class="n">init</span><span class="o">/</span><span class="mi">1</span><span class="p">]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">start_link</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="nv">Transport</span><span class="p">,</span> <span class="nv">Args</span><span class="p">)</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">start_link</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="p">[</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">],</span> <span class="p">[]).</span> <span class="c">% Here start_link blocks until init/1 is returned</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">init</span><span class="p">([</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">])</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">ranch</span><span class="p">:</span><span class="nf">accept_ack</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">),</span> <span class="c">% Here init/1 is blocked until ranch transfer socket to new process</span>
-</span><span class='line'>  <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">}.</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This code has an easily detected deadlock because ranch doesn&#8217;t get new Pid until init/1 is done and it is waiting for ranch
-to transfer socket and ranch cannot do it because it waits for pid.</p>
-
-<p>Simple way to deal with this kind of deadlocks is to change initialization of process:</p>
-
-<figure class='code'><figcaption><span>better ranch callback</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="p">-</span><span class="ni">module</span><span class="p">(</span><span class="n">my_worker</span><span class="p">).</span>
-</span><span class='line'><span class="p">-</span><span class="ni">export</span><span class="p">([</span><span class="n">start_link</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span> <span class="n">init</span><span class="o">/</span><span class="mi">1</span><span class="p">]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">start_link</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="nv">Transport</span><span class="p">,</span> <span class="nv">Args</span><span class="p">)</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">proc_lib</span><span class="p">:</span><span class="nf">start_link</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="p">[[</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">]]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">init</span><span class="p">([</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">])</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">proc_lib</span><span class="p">:</span><span class="nf">init_ack</span><span class="p">({</span><span class="n">ok</span><span class="p">,</span> <span class="n">self</span><span class="p">()}),</span> <span class="c">% first we unblock proc_lib:start_link</span>
-</span><span class='line'>  <span class="nn">ranch</span><span class="p">:</span><span class="nf">accept_ack</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">),</span> <span class="c">% and now we wait for ranch</span>
-</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">enter_loop</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="p">[]).</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This example is more about dealing with deadlocks, not protecting system from overload, but these topics are related and we&#8217;ll return to it
-later.</p>
-
-<h2>Unobtrusive reads</h2>
-
-<p>Very soon you understand that sometimes it is not a very good idea to ask central process for some read-only information via <code>gen_server:call</code> API.
-For example you are writing a multiplayer browser game and want to read a map of the world. What for to go to server process and
-ask it to copy all data? This process is very, very busy with other important tasks that require modification of data from single point.</p>
-
-<p>Erlyvideo has such a place in code when clients come and ask video segments. They are 1 megabyte binaries and are changed only once in 5 seconds.</p>
-
-<p>So you come to an idea that some data should be kept in public, named ets table. If client process needs some data like a video segment,
-or map of a game world or some other data that can be easily stored in a central process, than put it there.</p>
-
-<p>Statistics is a very good example of such data. It may be rather expensive to calculate statistics (for example recalculate sliding window for
-average response time may take significant resources). Don&#8217;t allow system administrator to crash your system by pressing F5 in browser!
-Put all generated data into ETS and serve it to clients in microseconds without any affecting of other system.</p>
-
-<p><a href="https://github.com/uwiger/gproc">gproc</a> does exactly this job for you.</p>
-
-<p>You may experience new problems with this approach. Using <code>gen_server:call</code> allows client process to wait until data is available and reading from
-ets table doesn&#8217;t block your process. Gproc has ability to lock caller until key is available, but sometimes it doesn&#8217;t work.</p>
-
-<p>Erlyvideo can serve stream as MPEG-TS. Client will teardown connection if no data is sent and this is why I had to use other approach:
-read in loop key from ets packet and if no key available, send null keepalive packet if no data available and sleep for one second.</p>
-
-<p>You should choose the way that better fits your requirements, but please, choose easiest one.</p>
-
-<h2>Debugging</h2>
-
-<p>Ok, you&#8217;ve organized your system in more backpushing way with <code>gen_server:call</code>, switched from requesting process to reading ets, but system sometimes blocks and fills log file with timeouts and errors.</p>
-
-<p>I can give you small hint</p>
-
-<p>So, my first advise was to make your system</p>
 </div>
   
+  
+    <footer>
+      <a rel="full-article" href="/2013/01/05/maintain-long-requests/">Read on &rarr;</a>
+    </footer>
   
 
 
@@ -235,7 +131,7 @@ read in loop key from ets packet and if no key available, send null keepalive pa
       
   <header>
     
-      <h1 class="entry-title"><a href="/2013/01/12/overload-protection-1/">Overload Protection 1</a></h1>
+      <h1 class="entry-title"><a href="/2013/01/04/unobtrusive-read/">Unobtrusive Read</a></h1>
     
     
       <p class="meta">
@@ -251,9 +147,153 @@ read in loop key from ets packet and if no key available, send null keepalive pa
   
 
 
-<time datetime="2013-01-12T00:29:00+04:00" pubdate data-updated="true">Jan 12<span>th</span>, 2013</time>
+<time datetime="2013-01-04T00:26:00+04:00" pubdate data-updated="true">Jan 4<span>th</span>, 2013</time>
         
-         | <a href="/2013/01/12/overload-protection-1/#disqus_thread">Comments</a>
+         | <a href="/2013/01/04/unobtrusive-read/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Post about <a href="/2013/01/03/deadlocks-1/">deadlocks</a> was finished with promise to tell about other ways to remove deadlocks from system,
+while maintaining it responsive and keeping control of system load.</p>
+
+<p>This capter will be about unobtrusive reads: how to read data from process without affecting its performance.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2013/01/04/unobtrusive-read/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-03T00:17:00+04:00" pubdate data-updated="true">Jan 3<span>rd</span>, 2013</time>
+        
+         | <a href="/2013/01/03/deadlocks-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In <a href="/2013/01/01/overload-protection-1/">previous</a> <a href="/2013/01/02/overload-protection-2/">chapters</a> we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.</p>
+
+<p>Synchronous <code>gen_server:call</code> was claimed to be a good approach for this goal, but synchronous calls with message passing brings deadlocks.</p>
+
+<p>Deadlocked system maintain good load (about zero) but it provides bad service (about zero), so we need to remove them.</p>
+
+<p>In this chapter we will talk about fighting with them.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2013/01/03/deadlocks-1/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2013/01/02/overload-protection-2/">Overload Protection 2</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-02T23:59:00+04:00" pubdate data-updated="true">Jan 2<span>nd</span>, 2013</time>
+        
+         | <a href="/2013/01/02/overload-protection-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="/2013/01/01/overload-protection-1/">Previous chapter</a></p>
+
+<p>We have discussed in previous chapter that your system may experience unbalanced load in different components that can lead to
+extremely large message queues in some central processes that are accessed via asynchronous <code>gen_server:cast</code> API.</p>
+
+<p>Switching to <code>gen_server:call</code> was advised as a generic approach to move overload points to borders of system. Now lets discuss
+how to protect borders of your system from requests that do not fit into capacity of your system.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2013/01/02/overload-protection-2/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2013/01/01/overload-protection-1/">Overload Protection 1</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-01T00:29:00+04:00" pubdate data-updated="true">Jan 1<span>st</span>, 2013</time>
+        
+         | <a href="/2013/01/01/overload-protection-1/#disqus_thread">Comments</a>
         
       </p>
     
@@ -281,7 +321,7 @@ survive load spikes and performance failures.</p>
   
   
     <footer>
-      <a rel="full-article" href="/2013/01/12/overload-protection-1/">Read on &rarr;</a>
+      <a rel="full-article" href="/2013/01/01/overload-protection-1/">Read on &rarr;</a>
     </footer>
   
 
@@ -301,11 +341,23 @@ survive load spikes and performance failures.</p>
   <ul id="recent_posts">
     
       <li class="post">
-        <a href="/2013/01/13/overload-protection-2/">Overload protection 2</a>
+        <a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a>
       </li>
     
       <li class="post">
-        <a href="/2013/01/12/overload-protection-1/">Overload protection 1</a>
+        <a href="/2013/01/04/unobtrusive-read/">Unobtrusive read</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/02/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/01/overload-protection-1/">Overload protection 1</a>
       </li>
     
   </ul>

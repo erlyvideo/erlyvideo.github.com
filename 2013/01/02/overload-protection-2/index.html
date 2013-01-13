@@ -5,15 +5,11 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Blog Archive - Erlyvideo blog</title>
+  <title>Overload protection 2 - Erlyvideo blog</title>
   <meta name="author" content="Max Lapshin">
 
   
-  <meta name="description" content="Blog Archive 2013 Maintain long requests
-Jan 05 2013 Unobtrusive read
-Jan 04 2013 Deadlocks 1
-Jan 03 2013 Overload protection 2
-Jan 02 2013 Overload &hellip;">
+  <meta name="description" content="Previous chapter We have discussed in previous chapter that your system may experience unbalanced load in different components that can lead to &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -22,7 +18,7 @@ Jan 02 2013 Overload &hellip;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://erlyvideo.github.com/blog/archives/">
+  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <script src="/javascripts/modernizr-2.0.js"></script>
@@ -67,72 +63,127 @@ Jan 02 2013 Overload &hellip;">
   <div id="main">
     <div id="content">
       <div>
-<article role="article">
+<article class="hentry" role="article">
   
   <header>
-    <h1 class="entry-title">Blog Archive</h1>
+    
+      <h1 class="entry-title">Overload Protection 2</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-02T23:59:00+04:00" pubdate data-updated="true">Jan 2<span>nd</span>, 2013</time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
     
   </header>
-  
-  <div id="blog-archives">
 
 
+<div class="entry-content"><p><a href="/2013/01/01/overload-protection-1/">Previous chapter</a></p>
 
-  
-  <h2>2013</h2>
+<p>We have discussed in previous chapter that your system may experience unbalanced load in different components that can lead to
+extremely large message queues in some central processes that are accessed via asynchronous <code>gen_server:cast</code> API.</p>
 
-<article>
-  
-<h1><a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a></h1>
-<time datetime="2013-01-05T00:38:00+04:00" pubdate><span class='month'>Jan</span> <span class='day'>05</span> <span class='year'>2013</span></time>
+<p>Switching to <code>gen_server:call</code> was advised as a generic approach to move overload points to borders of system. Now lets discuss
+how to protect borders of your system from requests that do not fit into capacity of your system.</p>
 
-
-</article>
+<!-- more -->
 
 
+<h2>Many clients, one server</h2>
 
-<article>
-  
-<h1><a href="/2013/01/04/unobtrusive-read/">Unobtrusive read</a></h1>
-<time datetime="2013-01-04T00:26:00+04:00" pubdate><span class='month'>Jan</span> <span class='day'>04</span> <span class='year'>2013</span></time>
+<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
+there will appear 10 000 of incoming messages in server message queue.</p>
 
+<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
+they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
+almost with any chance to survive this storm.</p>
 
-</article>
+<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
+<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
 
+<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
+This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
+with overloaded server: many timeouts in client processes.</p>
 
+<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
 
-<article>
-  
-<h1><a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a></h1>
-<time datetime="2013-01-03T00:17:00+04:00" pubdate><span class='month'>Jan</span> <span class='day'>03</span> <span class='year'>2013</span></time>
+<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
+that request is accepted but not handled in affordable time.</p>
 
+<h2>Deadlocks</h2>
 
-</article>
-
-
-
-<article>
-  
-<h1><a href="/2013/01/02/overload-protection-2/">Overload protection 2</a></h1>
-<time datetime="2013-01-02T23:59:00+04:00" pubdate><span class='month'>Jan</span> <span class='day'>02</span> <span class='year'>2013</span></time>
-
-
-</article>
-
-
-
-<article>
-  
-<h1><a href="/2013/01/01/overload-protection-1/">Overload protection 1</a></h1>
-<time datetime="2013-01-01T00:29:00+04:00" pubdate><span class='month'>Jan</span> <span class='day'>01</span> <span class='year'>2013</span></time>
-
-
-</article>
-
+<p>By switching from <code>gen_server:cast</code> to <code>gen_Server:call</code> you will suffer from deadlocks. Read <a href="/2013/01/03/deadlocks-1/">chapter about deadlocks</a> please.</p>
 </div>
 
+
+  <footer>
+    <p class="meta">
+      
   
+
+<span class="byline author vcard">Posted by <span class="fn">Max Lapshin</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-02T23:59:00+04:00" pubdate data-updated="true">Jan 2<span>nd</span>, 2013</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/02/overload-protection-2/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/02/overload-protection-2/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/2013/01/01/overload-protection-1/" title="Previous Post: Overload protection 1">&laquo; Overload protection 1</a>
+      
+      
+        <a class="basic-alignment right" href="/2013/01/03/deadlocks-1/" title="Next Post: Deadlocks 1">Deadlocks 1 &raquo;</a>
+      
+    </p>
+  </footer>
 </article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
 
 </div>
 
@@ -259,7 +310,10 @@ Jan 02 2013 Overload &hellip;">
       var disqus_shortname = 'erlyvideo';
       
         
-        var disqus_script = 'count.js';
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/02/overload-protection-2/';
+        var disqus_url = 'http://erlyvideo.github.com/2013/01/02/overload-protection-2/';
+        var disqus_script = 'embed.js';
       
     (function () {
       var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;

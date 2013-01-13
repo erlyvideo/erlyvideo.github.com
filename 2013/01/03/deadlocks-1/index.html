@@ -5,11 +5,11 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Overload protection 2 - Erlyvideo blog</title>
+  <title>Deadlocks 1 - Erlyvideo blog</title>
   <meta name="author" content="Max Lapshin">
 
   
-  <meta name="description" content="Previous chapter Many clients, one server What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends &hellip;">
+  <meta name="description" content="In previous chapters we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -18,7 +18,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/13/overload-protection-2/">
+  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <script src="/javascripts/modernizr-2.0.js"></script>
@@ -67,7 +67,7 @@
   
   <header>
     
-      <h1 class="entry-title">Overload Protection 2</h1>
+      <h1 class="entry-title">Deadlocks 1</h1>
     
     
       <p class="meta">
@@ -83,7 +83,7 @@
   
 
 
-<time datetime="2013-01-13T23:59:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+<time datetime="2013-01-03T00:17:00+04:00" pubdate data-updated="true">Jan 3<span>rd</span>, 2013</time>
         
          | <a href="#disqus_thread">Comments</a>
         
@@ -92,28 +92,16 @@
   </header>
 
 
-<div class="entry-content"><p><a href="/2013/01/12/overload-protection-1/">Previous chapter</a></p>
+<div class="entry-content"><p>In <a href="/2013/01/01/overload-protection-1/">previous</a> <a href="/2013/01/02/overload-protection-2/">chapters</a> we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.</p>
 
-<h2>Many clients, one server</h2>
+<p>Synchronous <code>gen_server:call</code> was claimed to be a good approach for this goal, but synchronous calls with message passing brings deadlocks.</p>
 
-<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
-there will appear 10 000 of incoming messages in server message queue.</p>
+<p>Deadlocked system maintain good load (about zero) but it provides bad service (about zero), so we need to remove them.</p>
 
-<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
-they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
-almost with any chance to survive this storm.</p>
+<p>In this chapter we will talk about fighting with them.</p>
 
-<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
-<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
+<!-- more -->
 
-<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
-This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
-with overloaded server: many timeouts in client processes.</p>
-
-<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
-
-<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
-that request is accepted but not handled in affordable time.</p>
 
 <h2>Deadlocks</h2>
 
@@ -185,41 +173,26 @@ to transfer socket and ranch cannot do it because it waits for pid.</p>
 </span></code></pre></td></tr></table></div></figure>
 
 
-<p>This example is more about dealing with deadlocks, not protecting system from overload, but these topics are related and we&#8217;ll return to it
-later.</p>
+<h2>Deadlocks in calls</h2>
 
-<h2>Unobtrusive reads</h2>
+<p>You should also remember about simple way to remove deadlock from handle_call:</p>
 
-<p>Very soon you understand that sometimes it is not a very good idea to ask central process for some read-only information via <code>gen_server:call</code> API.
-For example you are writing a multiplayer browser game and want to read a map of the world. What for to go to server process and
-ask it to copy all data? This process is very, very busy with other important tasks that require modification of data from single point.</p>
+<figure class='code'><figcaption><span>handle_call unlocked</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="nf">handle_call</span><span class="p">({</span><span class="n">run_task</span><span class="p">,</span> <span class="nv">Task</span><span class="p">},</span> <span class="nv">From</span><span class="p">,</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Id</span><span class="p">,</span> <span class="nv">State1</span><span class="p">}</span> <span class="o">=</span> <span class="n">register_task</span><span class="p">(</span><span class="nv">Task</span><span class="p">,</span> <span class="nv">State</span><span class="p">),</span>
+</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">reply</span><span class="p">(</span><span class="nv">From</span><span class="p">,</span> <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Id</span><span class="p">}),</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="n">handle_task</span><span class="p">(</span><span class="nv">Id</span><span class="p">,</span> <span class="nv">State1</span><span class="p">)}.</span>
+</span></code></pre></td></tr></table></div></figure>
 
-<p>Erlyvideo has such a place in code when clients come and ask video segments. They are 1 megabyte binaries and are changed only once in 5 seconds.</p>
 
-<p>So you come to an idea that some data should be kept in public, named ets table. If client process needs some data like a video segment,
-or map of a game world or some other data that can be easily stored in a central process, than put it there.</p>
+<p>This simple snippet can help you if <code>handle_task</code> requires some calls to producer of this task.</p>
 
-<p>Statistics is a very good example of such data. It may be rather expensive to calculate statistics (for example recalculate sliding window for
-average response time may take significant resources). Don&#8217;t allow system administrator to crash your system by pressing F5 in browser!
-Put all generated data into ETS and serve it to clients in microseconds without any affecting of other system.</p>
+<p>This chapter is more about dealing with deadlocks, not protecting system from overload, but these topics are related.</p>
 
-<p><a href="https://github.com/uwiger/gproc">gproc</a> does exactly this job for you.</p>
-
-<p>You may experience new problems with this approach. Using <code>gen_server:call</code> allows client process to wait until data is available and reading from
-ets table doesn&#8217;t block your process. Gproc has ability to lock caller until key is available, but sometimes it doesn&#8217;t work.</p>
-
-<p>Erlyvideo can serve stream as MPEG-TS. Client will teardown connection if no data is sent and this is why I had to use other approach:
-read in loop key from ets packet and if no key available, send null keepalive packet if no data available and sleep for one second.</p>
-
-<p>You should choose the way that better fits your requirements, but please, choose easiest one.</p>
-
-<h2>Debugging</h2>
-
-<p>Ok, you&#8217;ve organized your system in more backpushing way with <code>gen_server:call</code>, switched from requesting process to reading ets, but system sometimes blocks and fills log file with timeouts and errors.</p>
-
-<p>I can give you small hint</p>
-
-<p>So, my first advise was to make your system</p>
+<p>Next chapter will tell you about other way to untie components of your system: <a href="/2013/01/04/unobtrusive-read/">unobtrusive read</a></p>
 </div>
 
 
@@ -242,7 +215,7 @@ read in loop key from ets packet and if no key available, send null keepalive pa
   
 
 
-<time datetime="2013-01-13T23:59:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+<time datetime="2013-01-03T00:17:00+04:00" pubdate data-updated="true">Jan 3<span>rd</span>, 2013</time>
       
 
 
@@ -250,7 +223,7 @@ read in loop key from ets packet and if no key available, send null keepalive pa
     
       <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/13/overload-protection-2/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/13/overload-protection-2/" >Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/03/deadlocks-1/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/03/deadlocks-1/" >Tweet</a>
   
   
   <div class="g-plusone" data-size="medium"></div>
@@ -263,8 +236,10 @@ read in loop key from ets packet and if no key available, send null keepalive pa
     
     <p class="meta">
       
-        <a class="basic-alignment left" href="/2013/01/12/overload-protection-1/" title="Previous Post: Overload protection 1">&laquo; Overload protection 1</a>
+        <a class="basic-alignment left" href="/2013/01/02/overload-protection-2/" title="Previous Post: Overload protection 2">&laquo; Overload protection 2</a>
       
+      
+        <a class="basic-alignment right" href="/2013/01/04/unobtrusive-read/" title="Next Post: Unobtrusive read">Unobtrusive read &raquo;</a>
       
     </p>
   </footer>
@@ -285,11 +260,23 @@ read in loop key from ets packet and if no key available, send null keepalive pa
   <ul id="recent_posts">
     
       <li class="post">
-        <a href="/2013/01/13/overload-protection-2/">Overload protection 2</a>
+        <a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a>
       </li>
     
       <li class="post">
-        <a href="/2013/01/12/overload-protection-1/">Overload protection 1</a>
+        <a href="/2013/01/04/unobtrusive-read/">Unobtrusive read</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/02/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/01/overload-protection-1/">Overload protection 1</a>
       </li>
     
   </ul>
@@ -390,8 +377,8 @@ read in loop key from ets packet and if no key available, send null keepalive pa
       
         
         // var disqus_developer = 1;
-        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/13/overload-protection-2/';
-        var disqus_url = 'http://erlyvideo.github.com/2013/01/13/overload-protection-2/';
+        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/03/deadlocks-1/';
+        var disqus_url = 'http://erlyvideo.github.com/2013/01/03/deadlocks-1/';
         var disqus_script = 'embed.js';
       
     (function () {

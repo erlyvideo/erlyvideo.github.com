@@ -4,7 +4,7 @@
   <title><![CDATA[Erlyvideo blog]]></title>
   <link href="http://erlyvideo.github.com/atom.xml" rel="self"/>
   <link href="http://erlyvideo.github.com/"/>
-  <updated>2013-01-14T00:00:32+04:00</updated>
+  <updated>2013-01-14T01:06:56+04:00</updated>
   <id>http://erlyvideo.github.com/</id>
   <author>
     <name><![CDATA[Max Lapshin]]></name>
@@ -14,32 +14,215 @@
 
   
   <entry>
-    <title type="html"><![CDATA[Overload protection 2]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/13/overload-protection-2/"/>
-    <updated>2013-01-13T23:59:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/13/overload-protection-2</id>
-    <content type="html"><![CDATA[<p><a href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">Previous chapter</a></p>
+    <title type="html"><![CDATA[Maintain long requests]]></title>
+    <link href="http://erlyvideo.github.com/2013/01/05/maintain-long-requests/"/>
+    <updated>2013-01-05T00:38:00+04:00</updated>
+    <id>http://erlyvideo.github.com/2013/01/05/maintain-long-requests</id>
+    <content type="html"><![CDATA[<p>Previous chapters in this series were about <a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">fighting with overloads inside system</a>,
+<a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">dropping requests that will overload system</a>,
+<a href="http://erlyvideo.github.com/2013/01/03/deadlocks%201/">dealing with consequences of our measures</a>,
+<a href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/">making system less tied and faster</a>.</p>
 
-<h2>Many clients, one server</h2>
+<p>This last chapter will be about maintaining long user requests.</p>
 
-<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
-there will appear 10 000 of incoming messages in server message queue.</p>
+<p>If out load control system allows user to make a request that will consume large amount of resources, our system
+should understand that user doesn&#8217;t want to wait anymore.</p>
 
-<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
-they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
-almost with any chance to survive this storm.</p>
+<p>Here is an example: erlyvideo can export video archive as an mp4 file via HTTP request. It requires reading video twice: to build
+frame map and send frames. Two hours of video can take about 6 gigabytes, so one user request will lead to
+12 gigabytes transfer through our system. Such export task may take many seconds and user&#8217;s software may
+decide that request has failed due to timeout and restart it.</p>
 
-<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
-<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
+<p>After 10-15 restarts your system will be full of very consuming requests that are not required anymore. Lets discuss how to
+drop such requests.</p>
 
-<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
-This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
-with overloaded server: many timeouts in client processes.</p>
+<!-- more -->
 
-<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
 
-<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
-that request is accepted but not handled in affordable time.</p>
+<h2>Maintaining long requests</h2>
+
+<p>First fact you should remember is that erlang by default sets send_timeout on socket to infinity.
+It means that you will wait for 3 hours to send data to socket. 3 hours is ok to repair wire after nuclear attack,
+but it rarely happens nowadays, so I advise you to change socket send_timeout so several seconds.</p>
+
+<p>Next you should spawn task into a separate process and listen for both: process and socket, which of them is first to die.</p>
+
+<p>It looks so:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'>  <span class="nv">Socket</span> <span class="o">=</span> <span class="nn">cowboy_req</span><span class="p">:</span><span class="nb">get</span><span class="p">(</span><span class="n">socket</span><span class="p">,</span> <span class="nv">Req</span><span class="p">),</span>
+</span><span class='line'>  <span class="nv">Transport</span> <span class="o">=</span> <span class="nn">cowboy_req</span><span class="p">:</span><span class="nb">get</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="nv">Req</span><span class="p">),</span>
+</span><span class='line'>  <span class="nv">Transport</span><span class="p">:</span><span class="nb">send</span><span class="p">(</span><span class="nv">Socket</span><span class="p">,</span> <span class="p">[</span><span class="s">&quot;HTTP/1.1 200 OK</span><span class="se">\r\n</span><span class="s">Connection: close</span><span class="se">\r\n</span><span class="s">Content-Type: video/mp4</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nn">io_lib</span><span class="p">:</span><span class="nf">format</span><span class="p">(</span><span class="s">&quot;Content-Disposition: attachment; filename=</span><span class="si">~s</span><span class="s">.mp4</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nv">SaveName</span><span class="p">]),</span> <span class="nv">LenHeader</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">])</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nv">Self</span> <span class="o">=</span> <span class="n">self</span><span class="p">(),</span>
+</span><span class='line'>  <span class="nv">Pid</span> <span class="o">=</span> <span class="nn">proc_lib</span><span class="p">:</span><span class="nb">spawn</span><span class="p">(</span><span class="k">fun</span><span class="p">()</span> <span class="o">-&gt;</span>
+</span><span class='line'>    <span class="nb">put</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">{</span><span class="n">mp4_export_worker</span><span class="p">,</span><span class="nv">Root</span><span class="p">,</span><span class="nv">Name</span><span class="p">,</span><span class="nv">From</span><span class="p">,</span><span class="nv">Duration</span><span class="p">}),</span>
+</span><span class='line'>    <span class="nn">mp4_writer</span><span class="p">:</span><span class="nf">dump_media</span><span class="p">([{</span><span class="n">header</span><span class="p">,</span><span class="nv">Header</span><span class="p">},{</span><span class="n">writer</span><span class="p">,</span><span class="nv">Writer</span><span class="p">},{</span><span class="n">reader</span><span class="p">,</span><span class="nv">Reader</span><span class="p">},{</span><span class="n">start_pos</span><span class="p">,</span><span class="nv">StartPos</span><span class="p">}]),</span>
+</span><span class='line'>    <span class="nv">Self</span> <span class="o">!</span> <span class="n">done</span>
+</span><span class='line'>  <span class="k">end</span><span class="p">),</span>
+</span><span class='line'>  <span class="nn">erlang</span><span class="p">:</span><span class="nb">monitor</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="nv">Pid</span><span class="p">),</span>
+</span><span class='line'>  <span class="nn">inet</span><span class="p">:</span><span class="nf">setopts</span><span class="p">(</span><span class="nv">Socket</span><span class="p">,</span> <span class="p">[{</span><span class="n">active</span><span class="p">,</span><span class="n">once</span><span class="p">}]),</span>
+</span><span class='line'>  <span class="k">receive</span>
+</span><span class='line'>    <span class="n">done</span> <span class="o">-&gt;</span> <span class="n">ok</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">{</span><span class="n">tcp_closed</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="n">ok</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">{</span><span class="n">&#39;DOWN&#39;</span><span class="p">,</span> <span class="p">_,</span> <span class="p">_,</span> <span class="nv">Pid</span><span class="p">,</span> <span class="nv">Reason</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="o">?</span><span class="nv">D</span><span class="p">(</span><span class="nv">Reason</span><span class="p">);</span>
+</span><span class='line'>    <span class="nv">Else</span> <span class="o">-&gt;</span> <span class="o">?</span><span class="nv">D</span><span class="p">(</span><span class="nv">Else</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">end</span><span class="p">,</span>
+</span><span class='line'>  <span class="nn">erlang</span><span class="p">:</span><span class="nb">exit</span><span class="p">(</span><span class="nv">Pid</span><span class="p">,</span><span class="n">kill</span><span class="p">),</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">done</span><span class="p">,</span> <span class="nn">cowboy_req</span><span class="p">:</span><span class="nf">set</span><span class="p">([{</span><span class="n">connection</span><span class="p">,</span><span class="n">close</span><span class="p">},{</span><span class="n">resp_state</span><span class="p">,</span><span class="n">done</span><span class="p">}],</span> <span class="nv">Req</span><span class="p">)}.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Again:</p>
+
+<ol>
+<li>prepare HTTP response before task starts</li>
+<li>run task in separate process</li>
+<li>move http socket to {active,once} mode</li>
+<li>wait either for task finish, either for socket close</li>
+<li>close everything after task is finished or cancelled</li>
+</ol>
+
+
+<p>Mention that this snippet behaves badly with <a href="https://github.com/extend/cowboy">cowboy</a> internals, but it is ok,
+because there is no sense in making keepalive requests to a resource that is generated for many, many seconds.</p>
+
+<h2>Conclusions</h2>
+
+<p>I&#8217;ve tried to tell some very small piece of information in this five chapters about my experience in making erlyvideo a fault-tolerable and a rock-solid streaming server.</p>
+
+<p>You should understand that erlang itself is an excelent platform, but you should do something to make your system on erlang a rock-solid.</p>
+
+<p>Sometimes it is hard to plan capacity of your system, so it should behave properly under stress load: accept only those requests that can be handled.
+I hope that this series of posts will help you a bit in this hard and interesting task.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Unobtrusive read]]></title>
+    <link href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/"/>
+    <updated>2013-01-04T00:26:00+04:00</updated>
+    <id>http://erlyvideo.github.com/2013/01/04/unobtrusive-read</id>
+    <content type="html"><![CDATA[<p>Post about <a href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/">deadlocks</a> was finished with promise to tell about other ways to remove deadlocks from system,
+while maintaining it responsive and keeping control of system load.</p>
+
+<p>This capter will be about unobtrusive reads: how to read data from process without affecting its performance.</p>
+
+<!-- more -->
+
+
+<h2>Unobtrusive reads from ets</h2>
+
+<p>Very soon you understand that sometimes it is not a very good idea to ask central process for some read-only information via <code>gen_server:call</code> API.
+For example you are writing a multiplayer browser game and want to read a map of the world. What for to go to server process and
+ask it to copy all data? This process is very, very busy with other important tasks that require modification of data from single point.</p>
+
+<p>Erlyvideo has such a place in code when clients come and ask video segments. They are 1 megabyte binaries and are changed only once in 5 seconds.</p>
+
+<p>So you come to an idea that some data should be kept in public, named ets table. If client process needs some data like a video segment,
+or map of a game world or some other data that can be easily stored in a central process, than put it there.</p>
+
+<p>Statistics is a very good example of such data. It may be rather expensive to calculate statistics (for example recalculate sliding window for
+average response time may take significant resources). Don&#8217;t allow system administrator to crash your system by pressing F5 in browser!
+Put all generated data into ETS and serve it to clients in microseconds without any affecting of other system.</p>
+
+<p><a href="https://github.com/uwiger/gproc">gproc</a> does exactly this job for you.</p>
+
+<p>You may experience new problems with this approach. Using <code>gen_server:call</code> allows client process to wait until data is available and reading from
+ets table doesn&#8217;t block your process. Gproc has ability to lock caller until key is available, but sometimes it doesn&#8217;t work.</p>
+
+<p>Erlyvideo can serve stream as MPEG-TS. Client will teardown connection if no data is sent and this is why I had to use other approach:
+read in loop key from ets packet and if no key available, send null keepalive packet if no data available and sleep for one second.</p>
+
+<p>You should choose the way that better fits your requirements, but please, choose easiest one.</p>
+
+<h2>Reading from process dictionary</h2>
+
+<p>Sometimes keeping separate ets table may look like not a best idea. In this case I advise you to use process dictionary. Server process may write there its name, its status and some other short information that maybe useful for introspecting and into logging.</p>
+
+<p>For example erlyvideo stream is a very isolated process. It makes calls to a very small amount of processes, but it makes them and can block there.
+Especially it can block while writing archive on disk. This is why it happened to be a great idea to write:</p>
+
+<figure class='code'><figcaption><span>status debugging</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="nf">handle_call</span><span class="p">(</span><span class="nl">#video_frame</span><span class="p">{}</span> <span class="o">=</span> <span class="nv">Frame</span><span class="p">,</span> <span class="p">_</span><span class="nv">From</span><span class="p">,</span> <span class="nv">Stream</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="nb">put</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">write_frame_on_disk</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">write_frame_on_disk</span><span class="p">(</span><span class="nv">Frame</span><span class="p">,</span> <span class="nv">Stream</span><span class="p">),</span>
+</span><span class='line'>  <span class="nb">put</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">send_frame_to_repeater</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">send_frame_to_repeater</span><span class="p">(</span><span class="nv">Frame</span><span class="p">,</span> <span class="nv">Stream</span><span class="p">),</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">reply</span><span class="p">,</span> <span class="n">ok</span><span class="p">,</span> <span class="nv">Stream</span><span class="p">}.</span>
+</span><span class='line'>
+</span><span class='line'><span class="nf">send_frame</span><span class="p">(</span><span class="nv">Stream</span><span class="p">,</span> <span class="nv">Frame</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="k">try</span> <span class="nn">gen_server</span><span class="p">:</span><span class="nf">call</span><span class="p">(</span><span class="nv">Stream</span><span class="p">,</span> <span class="nv">Frame</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">catch</span>
+</span><span class='line'>    <span class="nn">error</span><span class="p">:{</span><span class="n">timeout</span><span class="p">,_}</span> <span class="o">-&gt;</span>
+</span><span class='line'>      <span class="p">{</span><span class="n">dictionary</span><span class="p">,</span> <span class="nv">Dict</span><span class="p">}</span> <span class="o">=</span> <span class="nb">process_info</span><span class="p">(</span><span class="nv">Stream</span><span class="p">,</span> <span class="n">dictionary</span><span class="p">),</span>
+</span><span class='line'>      <span class="nv">Name</span> <span class="o">=</span> <span class="nn">proplists</span><span class="p">:</span><span class="nf">get_value</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nv">Dict</span><span class="p">),</span>
+</span><span class='line'>      <span class="nv">Status</span> <span class="o">=</span> <span class="nn">proplists</span><span class="p">:</span><span class="nf">get_value</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="nv">Dict</span><span class="p">),</span>
+</span><span class='line'>      <span class="nn">erlang</span><span class="p">:</span><span class="nf">raise</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="p">{</span><span class="n">send_frame_timeout</span><span class="p">,</span><span class="nv">Name</span><span class="p">,</span><span class="nv">Status</span><span class="p">},</span> <span class="nn">erlang</span><span class="p">:</span><span class="nf">get_stacktrace</span><span class="p">())</span>
+</span><span class='line'>  <span class="k">end</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This tricky code will give you more informative stacktraces in logs that will tell you that source cannot publish frames to stream because stream
+is blocked in status <code>write_frame_on_disk</code> and you should do something with it.</p>
+
+<p>Main idea of this capter is: block if you need other process to modify required data but don&#8217;t touch remote process at all if you need &#8220;just ask for existing data&#8221;. Mention that this method behaves badly if data does not exists. It works for already existing data.</p>
+
+<p>Last chapter of this series will be devoted to <a href="http://erlyvideo.github.com/2013/01/05/maintain-long-requests/">maintaining long user requests</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Deadlocks 1]]></title>
+    <link href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/"/>
+    <updated>2013-01-03T00:17:00+04:00</updated>
+    <id>http://erlyvideo.github.com/2013/01/03/deadlocks-1</id>
+    <content type="html"><![CDATA[<p>In <a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">previous</a> <a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">chapters</a> we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.</p>
+
+<p>Synchronous <code>gen_server:call</code> was claimed to be a good approach for this goal, but synchronous calls with message passing brings deadlocks.</p>
+
+<p>Deadlocked system maintain good load (about zero) but it provides bad service (about zero), so we need to remove them.</p>
+
+<p>In this chapter we will talk about fighting with them.</p>
+
+<!-- more -->
+
 
 <h2>Deadlocks</h2>
 
@@ -111,49 +294,77 @@ to transfer socket and ranch cannot do it because it waits for pid.</p>
 </span></code></pre></td></tr></table></div></figure>
 
 
-<p>This example is more about dealing with deadlocks, not protecting system from overload, but these topics are related and we&#8217;ll return to it
-later.</p>
+<h2>Deadlocks in calls</h2>
 
-<h2>Unobtrusive reads</h2>
+<p>You should also remember about simple way to remove deadlock from handle_call:</p>
 
-<p>Very soon you understand that sometimes it is not a very good idea to ask central process for some read-only information via <code>gen_server:call</code> API.
-For example you are writing a multiplayer browser game and want to read a map of the world. What for to go to server process and
-ask it to copy all data? This process is very, very busy with other important tasks that require modification of data from single point.</p>
+<figure class='code'><figcaption><span>handle_call unlocked</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="nf">handle_call</span><span class="p">({</span><span class="n">run_task</span><span class="p">,</span> <span class="nv">Task</span><span class="p">},</span> <span class="nv">From</span><span class="p">,</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Id</span><span class="p">,</span> <span class="nv">State1</span><span class="p">}</span> <span class="o">=</span> <span class="n">register_task</span><span class="p">(</span><span class="nv">Task</span><span class="p">,</span> <span class="nv">State</span><span class="p">),</span>
+</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">reply</span><span class="p">(</span><span class="nv">From</span><span class="p">,</span> <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Id</span><span class="p">}),</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="n">handle_task</span><span class="p">(</span><span class="nv">Id</span><span class="p">,</span> <span class="nv">State1</span><span class="p">)}.</span>
+</span></code></pre></td></tr></table></div></figure>
 
-<p>Erlyvideo has such a place in code when clients come and ask video segments. They are 1 megabyte binaries and are changed only once in 5 seconds.</p>
 
-<p>So you come to an idea that some data should be kept in public, named ets table. If client process needs some data like a video segment,
-or map of a game world or some other data that can be easily stored in a central process, than put it there.</p>
+<p>This simple snippet can help you if <code>handle_task</code> requires some calls to producer of this task.</p>
 
-<p>Statistics is a very good example of such data. It may be rather expensive to calculate statistics (for example recalculate sliding window for
-average response time may take significant resources). Don&#8217;t allow system administrator to crash your system by pressing F5 in browser!
-Put all generated data into ETS and serve it to clients in microseconds without any affecting of other system.</p>
+<p>This chapter is more about dealing with deadlocks, not protecting system from overload, but these topics are related.</p>
 
-<p><a href="https://github.com/uwiger/gproc">gproc</a> does exactly this job for you.</p>
+<p>Next chapter will tell you about other way to untie components of your system: <a href="http://erlyvideo.github.com/2013/01/04/unobtrusive-read/">unobtrusive read</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Overload protection 2]]></title>
+    <link href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/"/>
+    <updated>2013-01-02T23:59:00+04:00</updated>
+    <id>http://erlyvideo.github.com/2013/01/02/overload-protection-2</id>
+    <content type="html"><![CDATA[<p><a href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/">Previous chapter</a></p>
 
-<p>You may experience new problems with this approach. Using <code>gen_server:call</code> allows client process to wait until data is available and reading from
-ets table doesn&#8217;t block your process. Gproc has ability to lock caller until key is available, but sometimes it doesn&#8217;t work.</p>
+<p>We have discussed in previous chapter that your system may experience unbalanced load in different components that can lead to
+extremely large message queues in some central processes that are accessed via asynchronous <code>gen_server:cast</code> API.</p>
 
-<p>Erlyvideo can serve stream as MPEG-TS. Client will teardown connection if no data is sent and this is why I had to use other approach:
-read in loop key from ets packet and if no key available, send null keepalive packet if no data available and sleep for one second.</p>
+<p>Switching to <code>gen_server:call</code> was advised as a generic approach to move overload points to borders of system. Now lets discuss
+how to protect borders of your system from requests that do not fit into capacity of your system.</p>
 
-<p>You should choose the way that better fits your requirements, but please, choose easiest one.</p>
+<!-- more -->
 
-<h2>Debugging</h2>
 
-<p>Ok, you&#8217;ve organized your system in more backpushing way with <code>gen_server:call</code>, switched from requesting process to reading ets, but system sometimes blocks and fills log file with timeouts and errors.</p>
+<h2>Many clients, one server</h2>
 
-<p>I can give you small hint</p>
+<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
+there will appear 10 000 of incoming messages in server message queue.</p>
 
-<p>So, my first advise was to make your system</p>
+<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
+they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
+almost with any chance to survive this storm.</p>
+
+<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
+<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
+
+<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
+This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
+with overloaded server: many timeouts in client processes.</p>
+
+<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
+
+<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
+that request is accepted but not handled in affordable time.</p>
+
+<h2>Deadlocks</h2>
+
+<p>By switching from <code>gen_server:cast</code> to <code>gen_Server:call</code> you will suffer from deadlocks. Read <a href="http://erlyvideo.github.com/2013/01/03/deadlocks-1/">chapter about deadlocks</a> please.</p>
 ]]></content>
   </entry>
   
   <entry>
     <title type="html"><![CDATA[Overload protection 1]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/"/>
-    <updated>2013-01-12T00:29:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/12/overload-protection-1</id>
+    <link href="http://erlyvideo.github.com/2013/01/01/overload-protection-1/"/>
+    <updated>2013-01-01T00:29:00+04:00</updated>
+    <id>http://erlyvideo.github.com/2013/01/01/overload-protection-1</id>
     <content type="html"><![CDATA[<h2>How to protect Erlang system from overload</h2>
 
 <p>Lets discuss a bit such a complicated and deep question like designing your system to be able to
@@ -217,7 +428,7 @@ incoming message queue.</p>
 <p>So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don&#8217;t let data to accumulate inside your system, use backpush mechanism to
 slow down producer. <code>gen_server:call</code> is a good example of such backpush mechanism. One client process will be limited by speed of server process.</p>
 
-<p><a href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">Next chapter</a></p>
+<p><a href="http://erlyvideo.github.com/2013/01/02/overload-protection-2/">Next chapter</a></p>
 ]]></content>
   </entry>
   
