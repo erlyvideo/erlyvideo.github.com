@@ -1,7 +1,7 @@
 ---
 layout: post
-title: "Overload protection"
-date: 2013-01-13 00:29
+title: "Overload protection 1"
+date: 2013-01-01 00:29
 comments: true
 categories: 
 ---
@@ -68,93 +68,7 @@ So we have understood how to deal with slow-consumer-fast-producer problem in ca
 slow down producer. `gen_server:call` is a good example of such backpush mechanism. One client process will be limited by speed of server process.
 
 
-
-Many clients, one server
-------------------------
-
-What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends `gen_server:call` response to server,
-there will appear 10 000 of incoming messages in server message queue.
-
-First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
-they will resend request and will duplicate their requests in server's message queue. Now you may be sure: your system is reliably overloaded
-almost with any chance to survive this storm.
-
-This is a big caveat of `gen_server:call` API: client cannot tell server that it refuses from request. This problem appears because we misused
-`gen_server:call`, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.
-
-There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
-This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
-with overloaded server: many timeouts in client processes.
-
-If `process_info(Server, message_queue_len)` is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.
-
-Mention this important fact: we don't accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
-that request is accepted but not handled in affordable time.
-
-
-Deadlocks
----------
-
-By switching from `gen_server:cast` to `gen_server:call` you will face with deadlocks. Process 1 calls process 2, process 2 starts process 3, process
-3 calls process 2 and in 5 seconds all of them die with error(timeout). 
-
-Erlyvideo2 had a good example of such deadlock-prone component. It is stream registrator. Video stream should be atomically started on demand if
-not started yet. There is playlist type of streams that requires other stream to be started.
-
-Client asks media_registrator to start a stream via `gen_server:call`. Media registrator looks in process list and starts new playlist stream.
-Playlist stream loads entries and asks media_registrator to start other stream, but media_registrator is busy launching this playlist stream.
-
-This is an example of silly deadlock which can be easily fixed but you may experience more complicated deadlocks or just simple locks.
-
-There are many different ways to fight them. First way is just to fix removing simultaneous calls.
-
-For example lets take a look at [ranch](https://github.com/extend/ranch). It is a pool of network connection acceptors that starts your process
-to handle network client. First your callback must return Pid of your process, than your process should receive message that socket
-ownership is transferred to a new process.
-
-Let's take a look at a wrong code:
-
-```erlang wrong ranch callback
--module(my_worker).
--export([start_link/4, init/1]).
-
-start_link(ListenerPid, Socket, Transport, Args) ->
-  gen_server:start_link(?MODULE, [ListenerPid, Socket], []). % Here start_link blocks until init/1 is returned
-
-init([ListenerPid, Socket]) ->
-  ranch:accept_ack(ListenerPid), % Here init/1 is blocked until ranch transfer socket to new process
-  {ok, Socket}.
-```
-
-This code has an easily detected deadlock because ranch doesn't get new Pid until init/1 is done and it is waiting for ranch
-to transfer socket and ranch cannot do it because it waits for pid.
-
-Simple way to deal with this kind of deadlocks is to change initialization of process:
-
-```erlang better ranch callback
--module(my_worker).
--export([start_link/4, init/1]).
-
-start_link(ListenerPid, Socket, Transport, Args) ->
-  proc_lib:start_link(?MODULE, [[ListenerPid, Socket]]).
-
-init([ListenerPid, Socket]) ->
-  proc_lib:init_ack({ok, self()}), % first we unblock proc_lib:start_link
-  ranch:accept_ack(ListenerPid), % and now we wait for ranch
-  gen_server:enter_loop(?MODULE, Socket, []).
-```
-
-
-This example is more about dealing with deadlocks, not protecting system from overload, but these topics are related and we'll return to it 
-later.
-
-
-Unobtrusive reads
------------------
-
-
-
-
+[Next chapter](/2013/01/02/overload-protection-2/)
 
 
 

@@ -1,0 +1,92 @@
+---
+layout: post
+title: "Deadlocks 1"
+date: 2013-01-03 00:17
+comments: true
+categories: 
+---
+
+In [previous](/2013/01/01/overload-protection-1/) [chapters](/2013/01/02/overload-protection-2/) we have discussed interesting topic about adding feedback in components of your system to maintain stable system load and keep it responsive.
+
+Synchronous `gen_server:call` was claimed to be a good approach for this goal, but synchronous calls with message passing brings deadlocks.
+
+Deadlocked system maintain good load (about zero) but it provides bad service (about zero), so we need to remove them.
+
+In this chapter we will talk about fighting with them.
+
+<!-- more -->
+
+Deadlocks
+---------
+
+By switching from `gen_server:cast` to `gen_server:call` you will face with deadlocks. Process 1 calls process 2, process 2 starts process 3, process
+3 calls process 2 and in 5 seconds all of them die with error(timeout). 
+
+Erlyvideo2 had a good example of such deadlock-prone component. It is stream registrator. Video stream should be atomically started on demand if
+not started yet. There is playlist type of streams that requires other stream to be started.
+
+Client asks media_registrator to start a stream via `gen_server:call`. Media registrator looks in process list and starts new playlist stream.
+Playlist stream loads entries and asks media_registrator to start other stream, but media_registrator is busy launching this playlist stream.
+
+This is an example of silly deadlock which can be easily fixed but you may experience more complicated deadlocks or just simple locks.
+
+There are many different ways to fight them. First way is just to fix removing simultaneous calls.
+
+For example lets take a look at [ranch](https://github.com/extend/ranch). It is a pool of network connection acceptors that starts your process
+to handle network client. First your callback must return Pid of your process, than your process should receive message that socket
+ownership is transferred to a new process.
+
+Let's take a look at a wrong code:
+
+```erlang wrong ranch callback
+-module(my_worker).
+-export([start_link/4, init/1]).
+
+start_link(ListenerPid, Socket, Transport, Args) ->
+  gen_server:start_link(?MODULE, [ListenerPid, Socket], []). % Here start_link blocks until init/1 is returned
+
+init([ListenerPid, Socket]) ->
+  ranch:accept_ack(ListenerPid), % Here init/1 is blocked until ranch transfer socket to new process
+  {ok, Socket}.
+```
+
+This code has an easily detected deadlock because ranch doesn't get new Pid until init/1 is done and it is waiting for ranch
+to transfer socket and ranch cannot do it because it waits for pid.
+
+Simple way to deal with this kind of deadlocks is to change initialization of process:
+
+```erlang better ranch callback
+-module(my_worker).
+-export([start_link/4, init/1]).
+
+start_link(ListenerPid, Socket, Transport, Args) ->
+  proc_lib:start_link(?MODULE, [[ListenerPid, Socket]]).
+
+init([ListenerPid, Socket]) ->
+  proc_lib:init_ack({ok, self()}), % first we unblock proc_lib:start_link
+  ranch:accept_ack(ListenerPid), % and now we wait for ranch
+  gen_server:enter_loop(?MODULE, Socket, []).
+```
+
+
+Deadlocks in calls
+------------------
+
+You should also remember about simple way to remove deadlock from handle_call:
+
+```erlang handle_call unlocked
+handle_call({run_task, Task}, From, State) ->
+  {ok, Id, State1} = register_task(Task, State),
+  gen_server:reply(From, {ok, Id}),
+  {noreply, handle_task(Id, State1)}.
+```
+
+This simple snippet can help you if `handle_task` requires some calls to producer of this task.
+
+
+
+
+This chapter is more about dealing with deadlocks, not protecting system from overload, but these topics are related.
+
+Next chapter will tell you about other way to untie components of your system: [unobtrusive read](/2013/01/04/unobtrusive-read/) 
+
