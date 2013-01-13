@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: 
+
+Sitemap: http://erlyvideo.github.com/sitemap.xml 
