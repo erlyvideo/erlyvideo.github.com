@@ -1,24 +1,98 @@
-<?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
 
-  <title><![CDATA[Erlyvideo blog]]></title>
-  <link href="http://erlyvideo.github.com/atom.xml" rel="self"/>
-  <link href="http://erlyvideo.github.com/"/>
-  <updated>2013-01-14T00:00:32+04:00</updated>
-  <id>http://erlyvideo.github.com/</id>
-  <author>
-    <name><![CDATA[Max Lapshin]]></name>
-    <email><![CDATA[max@erlyvideo.org]]></email>
-  </author>
-  <generator uri="http://octopress.org/">Octopress</generator>
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Overload protection 2 - Erlyvideo blog</title>
+  <meta name="author" content="Max Lapshin">
 
   
-  <entry>
-    <title type="html"><![CDATA[Overload protection 2]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/13/overload-protection-2/"/>
-    <updated>2013-01-13T23:59:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/13/overload-protection-2</id>
-    <content type="html"><![CDATA[<p><a href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">Previous chapter</a></p>
+  <meta name="description" content="Previous chapter Many clients, one server What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/13/overload-protection-2/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="/atom.xml" rel="alternate" title="Erlyvideo blog" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Erlyvideo blog</a></h1>
+  
+    <h2>Videostreaming in Erlang</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:erlyvideo.github.com" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Overload Protection 2</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-13T23:59:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><a href="/2013/01/12/overload-protection-1/">Previous chapter</a></p>
 
 <h2>Many clients, one server</h2>
 
@@ -146,79 +220,223 @@ read in loop key from ets packet and if no key available, send null keepalive pa
 <p>I can give you small hint</p>
 
 <p>So, my first advise was to make your system</p>
-]]></content>
-  </entry>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
   
-  <entry>
-    <title type="html"><![CDATA[Overload protection 1]]></title>
-    <link href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/"/>
-    <updated>2013-01-12T00:29:00+04:00</updated>
-    <id>http://erlyvideo.github.com/2013/01/12/overload-protection-1</id>
-    <content type="html"><![CDATA[<h2>How to protect Erlang system from overload</h2>
 
-<p>Lets discuss a bit such a complicated and deep question like designing your system to be able to
-survive load spikes and performance failures.</p>
+<span class="byline author vcard">Posted by <span class="fn">Max Lapshin</span></span>
 
-<p>This post will describe expirience of building video streaming server erlyvideo so you should assume following facts:</p>
-
-<ol>
-<li>erlyvideo does a very small amount of calculations. Major part of work can be described like &#8220;take data, repack and put it into next sink&#8221;</li>
-<li>erlyvideo has large amount of very different IO tasks: read data from sockets, from files, write different replies to sockets and files.</li>
-</ol>
+      
 
 
-<p>So you can imagine streaming server as a system that serves like a rather fast pipe with very unreliable ends. Thousands of very unreliable ends.</p>
-
-<p>Lets discuss how to protect this pipe from consuming more data via inputs that can be transmitted via outputs.</p>
-
-<!-- more -->
 
 
-<h2>Major failures</h2>
-
-<p>There are two most often reasons for erlyvideo to fail:</p>
-
-<ol>
-<li>some error happened that involved giant terms (more than 10 MB of data) and error_logger is trying to print it. It consumes several gigabytes of RAM and OOM killer stops erlang VM</li>
-<li>some process is receiving messages slower than they arrive and it consumes all available RAM.</li>
-</ol>
 
 
-<p>It is very easy to deal with first problem: just install <a href="https://github.com/basho/lager">lager</a> You should understand that <code>gen_server:format_status</code> callback doesn&#8217;t work. error_logger tries to print last message, gen_server state and error reason. Each of these three items can be very big, so lager is the only way to protect your system from such kind of failure.</p>
 
-<p>Rest of this post will be about second problem.</p>
 
-<h2>gen_server:call</h2>
-
-<p>Very fast and easy answer to problem of big message box is: don&#8217;t use gen_server:cast, use gen_server:call. But this answer is wrong as any too fast and too easy answer to a complicated problem.</p>
-
-<p>When should we use <code>gen_server:call</code> according to documentation? Looks like if we want some reply to our message. We send command to perform some calculation to other process and receive calculated data.</p>
-
-<p>In short: <code>gen_server:cast</code> just sends asynchronous non-blocking message from one process to other and <code>gen_server:cast</code> waits for reply from
-server process to our request. While server process is processing client&#8217;s request, client process is absolutely unresponsible and cannot do
-any job.</p>
-
-<p>If you relapse into sin of synthetic microbenchmarks you can easily find out that <code>gen_server:cast</code> is much much faster than <code>gen_server:call</code>.
-You may even write a complicated benchmark, launch it for several days and say me: look, there are no memory leaks and code with <code>gen_server:cast</code>
-consumes only 50% CPU of <code>gen_server:call</code> benchmark. You are tricked by wrong target of your benchmarks.</p>
-
-<p>You should remember a very important thing: no matter how much CPU is consumed by your system, matters only how many users can be served and how stable is their service.</p>
-
-<p>What does this fact means to us? It means that if client process is sending some data to server process (for example, user is publishing video frames) to server and you are using <code>gen_server:cast</code> to deliver frames you may suffer from slowness of server process.</p>
-
-<p>For example server process is writing data on disk. Everything is working fine on your new shiny Macbook Air with SSD but then you install your system on Amazon EC2 with rusty HDD and you find out that sometimes disk access can be VERY slow. Server process cannot receive frames from message queue because it is writing data on disk. Client process doesn&#8217;t know anything about it and will send frames unless memory is over.</p>
-
-<p>It is good when you find out such a problem with video stream, because memory is exhausted in minutes. Much worser is when memory can leak many days.</p>
-
-<p>How can you protect server process from such overload? Switch to <code>gen_server:call</code> even if you don&#8217;t need any response on your message.
-When <code>gen_server:call(Server, Command)</code> returns you can be absolutely sure, that server process have consumed your message and it is no more in
-incoming message queue.</p>
-
-<p>So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don&#8217;t let data to accumulate inside your system, use backpush mechanism to
-slow down producer. <code>gen_server:call</code> is a good example of such backpush mechanism. One client process will be limited by speed of server process.</p>
-
-<p><a href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">Next chapter</a></p>
-]]></content>
-  </entry>
   
-</feed>
+
+
+<time datetime="2013-01-13T23:59:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/13/overload-protection-2/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/13/overload-protection-2/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/2013/01/12/overload-protection-1/" title="Previous Post: Overload protection 1">&laquo; Overload protection 1</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/2013/01/13/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/12/overload-protection-1/">Overload protection 1</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/erlyvideo">@erlyvideo</a> on GitHub
+  
+  <script type="text/javascript">
+    $.domReady(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'erlyvideo',
+            count: 0,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("erlyvideo", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/erlyvideo" class="twitter-follow-button" data-show-count="false">Follow @erlyvideo</a>
+  
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2013 - Max Lapshin -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+(function (d, w, c) {
+    (w[c] = w[c] || []).push(function() {
+        try {
+            w.yaCounter2106928 = new Ya.Metrika({id:2106928, enableAll: true});
+        } catch(e) {}
+    });
+
+    var n = d.getElementsByTagName("script")[0],
+        s = d.createElement("script"),
+        f = function () { n.parentNode.insertBefore(s, n); };
+    s.type = "text/javascript";
+    s.async = true;
+    s.src = (d.location.protocol == "https:" ? "https:" : "http:") + "//mc.yandex.ru/metrika/watch.js";
+
+    if (w.opera == "[object Opera]") {
+        d.addEventListener("DOMContentLoaded", f);
+    } else { f(); }
+})(document, window, "yandex_metrika_callbacks");
+</script>
+<noscript><div><img src="//mc.yandex.ru/watch/2106928" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'erlyvideo';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/13/overload-protection-2/';
+        var disqus_url = 'http://erlyvideo.github.com/2013/01/13/overload-protection-2/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

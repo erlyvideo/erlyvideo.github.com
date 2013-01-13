@@ -5,7 +5,7 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Overload protection - Erlyvideo blog</title>
+  <title>Overload protection 1 - Erlyvideo blog</title>
   <meta name="author" content="Max Lapshin">
 
   
@@ -19,7 +19,7 @@ survive &hellip;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://erlyvideo.github.com/blog/2013/01/13/overload-protection/">
+  <link rel="canonical" href="http://erlyvideo.github.com/2013/01/12/overload-protection-1/">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <script src="/javascripts/modernizr-2.0.js"></script>
@@ -68,7 +68,7 @@ survive &hellip;">
   
   <header>
     
-      <h1 class="entry-title">Overload Protection</h1>
+      <h1 class="entry-title">Overload Protection 1</h1>
     
     
       <p class="meta">
@@ -84,7 +84,7 @@ survive &hellip;">
   
 
 
-<time datetime="2013-01-13T00:29:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+<time datetime="2013-01-12T00:29:00+04:00" pubdate data-updated="true">Jan 12<span>th</span>, 2013</time>
         
          | <a href="#disqus_thread">Comments</a>
         
@@ -156,101 +156,7 @@ incoming message queue.</p>
 <p>So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don&#8217;t let data to accumulate inside your system, use backpush mechanism to
 slow down producer. <code>gen_server:call</code> is a good example of such backpush mechanism. One client process will be limited by speed of server process.</p>
 
-<h2>Many clients, one server</h2>
-
-<p>What will happen if there is not one client, but thousand of them. Or ten thousands? If each of them sends <code>gen_server:call</code> response to server,
-there will appear 10 000 of incoming messages in server message queue.</p>
-
-<p>First 300 of them will be consumed and rest of clients will receive exit(timeout) from gen_server library. If this are smart clients,
-they will resend request and will duplicate their requests in server&#8217;s message queue. Now you may be sure: your system is reliably overloaded
-almost with any chance to survive this storm.</p>
-
-<p>This is a big caveat of <code>gen_server:call</code> API: client cannot tell server that it refuses from request. This problem appears because we misused
-<code>gen_server:call</code>, it is designed for fast response. Better say so: erlang processes should keep small message queue to be responsive.</p>
-
-<p>There is a simple tip for you to protect code from such problem: introspect server message queue length before sending gen_server:call.
-This method is non-deterministic and should be used only if you experience such problem. However it is easy to understand that you have problem
-with overloaded server: many timeouts in client processes.</p>
-
-<p>If <code>process_info(Server, message_queue_len)</code> is bigger than some empiric constant than refuse to make request and respond to client with 503 response telling external client that your system have not accepted request at all.</p>
-
-<p>Mention this important fact: we don&#8217;t accept user request at all, not leave it unmaintained inside our system. 504 Gateway timeout code usually means
-that request is accepted but not handled in affordable time.</p>
-
-<h2>Deadlocks</h2>
-
-<p>By switching from <code>gen_server:cast</code> to <code>gen_server:call</code> you will face with deadlocks. Process 1 calls process 2, process 2 starts process 3, process
-3 calls process 2 and in 5 seconds all of them die with error(timeout).</p>
-
-<p>Erlyvideo2 had a good example of such deadlock-prone component. It is stream registrator. Video stream should be atomically started on demand if
-not started yet. There is playlist type of streams that requires other stream to be started.</p>
-
-<p>Client asks media_registrator to start a stream via <code>gen_server:call</code>. Media registrator looks in process list and starts new playlist stream.
-Playlist stream loads entries and asks media_registrator to start other stream, but media_registrator is busy launching this playlist stream.</p>
-
-<p>This is an example of silly deadlock which can be easily fixed but you may experience more complicated deadlocks or just simple locks.</p>
-
-<p>There are many different ways to fight them. First way is just to fix removing simultaneous calls.</p>
-
-<p>For example lets take a look at <a href="https://github.com/extend/ranch">ranch</a>. It is a pool of network connection acceptors that starts your process
-to handle network client. First your callback must return Pid of your process, than your process should receive message that socket
-ownership is transferred to a new process.</p>
-
-<p>Let&#8217;s take a look at a wrong code:</p>
-
-<figure class='code'><figcaption><span>wrong ranch callback</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="p">-</span><span class="ni">module</span><span class="p">(</span><span class="n">my_worker</span><span class="p">).</span>
-</span><span class='line'><span class="p">-</span><span class="ni">export</span><span class="p">([</span><span class="n">start_link</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span> <span class="n">init</span><span class="o">/</span><span class="mi">1</span><span class="p">]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">start_link</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="nv">Transport</span><span class="p">,</span> <span class="nv">Args</span><span class="p">)</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">start_link</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="p">[</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">],</span> <span class="p">[]).</span> <span class="c">% Here start_link blocks until init/1 is returned</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">init</span><span class="p">([</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">])</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">ranch</span><span class="p">:</span><span class="nf">accept_ack</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">),</span> <span class="c">% Here init/1 is blocked until ranch transfer socket to new process</span>
-</span><span class='line'>  <span class="p">{</span><span class="n">ok</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">}.</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This code has an easily detected deadlock because ranch doesn&#8217;t get new Pid until init/1 is done and it is waiting for ranch
-to transfer socket and ranch cannot do it because it waits for pid.</p>
-
-<p>Simple way to deal with this kind of deadlocks is to change initialization of process:</p>
-
-<figure class='code'><figcaption><span>better ranch callback</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="p">-</span><span class="ni">module</span><span class="p">(</span><span class="n">my_worker</span><span class="p">).</span>
-</span><span class='line'><span class="p">-</span><span class="ni">export</span><span class="p">([</span><span class="n">start_link</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span> <span class="n">init</span><span class="o">/</span><span class="mi">1</span><span class="p">]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">start_link</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="nv">Transport</span><span class="p">,</span> <span class="nv">Args</span><span class="p">)</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">proc_lib</span><span class="p">:</span><span class="nf">start_link</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="p">[[</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">]]).</span>
-</span><span class='line'>
-</span><span class='line'><span class="nf">init</span><span class="p">([</span><span class="nv">ListenerPid</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">])</span> <span class="o">-&gt;</span>
-</span><span class='line'>  <span class="nn">proc_lib</span><span class="p">:</span><span class="nf">init_ack</span><span class="p">({</span><span class="n">ok</span><span class="p">,</span> <span class="n">self</span><span class="p">()}),</span> <span class="c">% first we unblock proc_lib:start_link</span>
-</span><span class='line'>  <span class="nn">ranch</span><span class="p">:</span><span class="nf">accept_ack</span><span class="p">(</span><span class="nv">ListenerPid</span><span class="p">),</span> <span class="c">% and now we wait for ranch</span>
-</span><span class='line'>  <span class="nn">gen_server</span><span class="p">:</span><span class="nf">enter_loop</span><span class="p">(</span><span class="o">?</span><span class="nv">MODULE</span><span class="p">,</span> <span class="nv">Socket</span><span class="p">,</span> <span class="p">[]).</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This example is more about dealing with deadlocks, not protecting system from overload, but these topics are related and we&#8217;ll return to it
-later.</p>
-
-<h2>Unobtrusive reads</h2>
+<p><a href="/2013/01/12/overload-protection-1/">Next chapter</a></p>
 </div>
 
 
@@ -273,7 +179,7 @@ later.</p>
   
 
 
-<time datetime="2013-01-13T00:29:00+04:00" pubdate data-updated="true">Jan 13<span>th</span>, 2013</time>
+<time datetime="2013-01-12T00:29:00+04:00" pubdate data-updated="true">Jan 12<span>th</span>, 2013</time>
       
 
 
@@ -281,7 +187,7 @@ later.</p>
     
       <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/blog/2013/01/13/overload-protection/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/blog/2013/01/13/overload-protection/" >Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://erlyvideo.github.com/2013/01/12/overload-protection-1/" data-via="erlyvideo" data-counturl="http://erlyvideo.github.com/2013/01/12/overload-protection-1/" >Tweet</a>
   
   
   <div class="g-plusone" data-size="medium"></div>
@@ -294,6 +200,8 @@ later.</p>
     
     <p class="meta">
       
+      
+        <a class="basic-alignment right" href="/2013/01/13/overload-protection-2/" title="Next Post: Overload protection 2">Overload protection 2 &raquo;</a>
       
     </p>
   </footer>
@@ -314,7 +222,11 @@ later.</p>
   <ul id="recent_posts">
     
       <li class="post">
-        <a href="/blog/2013/01/13/overload-protection/">Overload protection</a>
+        <a href="/2013/01/13/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/12/overload-protection-1/">Overload protection 1</a>
       </li>
     
   </ul>
@@ -415,8 +327,8 @@ later.</p>
       
         
         // var disqus_developer = 1;
-        var disqus_identifier = 'http://erlyvideo.github.com/blog/2013/01/13/overload-protection/';
-        var disqus_url = 'http://erlyvideo.github.com/blog/2013/01/13/overload-protection/';
+        var disqus_identifier = 'http://erlyvideo.github.com/2013/01/12/overload-protection-1/';
+        var disqus_url = 'http://erlyvideo.github.com/2013/01/12/overload-protection-1/';
         var disqus_script = 'embed.js';
       
     (function () {

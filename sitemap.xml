@@ -1,16 +1,20 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
     <url>
-        <loc>http://erlyvideo.github.com/blog/2013/01/13/overload-protection/</loc>
-        <lastmod>2013-01-13T23:39:59+04:00</lastmod>
+        <loc>http://erlyvideo.github.com/2013/01/12/overload-protection-1/</loc>
+        <lastmod>2013-01-14T00:00:16+04:00</lastmod>
+    </url>
+    <url>
+        <loc>http://erlyvideo.github.com/2013/01/13/overload-protection-2/</loc>
+        <lastmod>2013-01-14T00:00:03+04:00</lastmod>
     </url>
     <url>
         <loc>http://erlyvideo.github.com/blog/archives/</loc>
-        <lastmod>2013-01-13T23:39:59+04:00</lastmod>
+        <lastmod>2013-01-14T00:00:16+04:00</lastmod>
     </url>
     <url>
         <loc>http://erlyvideo.github.com/</loc>
-        <lastmod>2013-01-13T23:39:59+04:00</lastmod>
+        <lastmod>2013-01-14T00:00:16+04:00</lastmod>
     </url>
     <url>
         <loc>http://erlyvideo.github.com/robots.txt</loc>
