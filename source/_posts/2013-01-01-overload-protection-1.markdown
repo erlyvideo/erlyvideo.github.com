@@ -43,7 +43,7 @@ Very fast and easy answer to problem of big message box is: don't use gen_server
 
 When should we use `gen_server:call` according to documentation? Looks like if we want some reply to our message. We send command to perform some calculation to other process and receive calculated data.
 
-In short: `gen_server:cast` just sends asynchronous non-blocking message from one process to other and `gen_server:cast` waits for reply from 
+In short: `gen_server:cast` just sends asynchronous non-blocking message from one process to other and `gen_server:call` waits for reply from 
 server process to our request. While server process is processing client's request, client process is absolutely unresponsible and cannot do
 any job.
 
@@ -58,14 +58,14 @@ What does this fact means to us? It means that if client process is sending some
 
 For example server process is writing data on disk. Everything is working fine on your new shiny Macbook Air with SSD but then you install your system on Amazon EC2 with rusty HDD and you find out that sometimes disk access can be VERY slow. Server process cannot receive frames from message queue because it is writing data on disk. Client process doesn't know anything about it and will send frames unless memory is over.
 
-It is good when you find out such a problem with video stream, because memory is exhausted in minutes. Much worser is when memory can leak many days.
+It is good when you find out such a problem with video stream, because memory is exhausted in minutes. Much worse is when memory can leak many days.
 
 How can you protect server process from such overload? Switch to `gen_server:call` even if you don't need any response on your message.
 When `gen_server:call(Server, Command)` returns you can be absolutely sure, that server process have consumed your message and it is no more in
 incoming message queue.
 
-So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don't let data to accumulate inside your system, use backpush mechanism to
-slow down producer. `gen_server:call` is a good example of such backpush mechanism. One client process will be limited by speed of server process.
+So we have understood how to deal with slow-consumer-fast-producer problem in case of one client processe and one server process. We should move point of data accumulation to the beginning of data stream. Don't let data to accumulate inside your system, use backpressure mechanism to
+slow down producer. `gen_server:call` is a good example of such backpressure mechanism. One client process will be limited by speed of server process.
 
 
 [Next chapter](/2013/01/02/overload-protection-2/)

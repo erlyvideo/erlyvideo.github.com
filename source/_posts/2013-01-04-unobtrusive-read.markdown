@@ -9,7 +9,7 @@ categories:
 Post about [deadlocks](/2013/01/03/deadlocks-1/) was finished with promise to tell about other ways to remove deadlocks from system,
 while maintaining it responsive and keeping control of system load.
 
-This capter will be about unobtrusive reads: how to read data from process without affecting its performance.
+This chapter will be about unobtrusive reads: how to read data from process without affecting its performance.
 
 
 <!-- more -->

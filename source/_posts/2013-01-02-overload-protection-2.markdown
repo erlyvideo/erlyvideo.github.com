@@ -44,7 +44,7 @@ that request is accepted but not handled in affordable time.
 Deadlocks
 ---------
 
-By switching from `gen_server:cast` to `gen_Server:call` you will suffer from deadlocks. Read [chapter about deadlocks](/2013/01/03/deadlocks-1/) please.
+By switching from `gen_server:cast` to `gen_server:call` you will suffer from deadlocks. Read [chapter about deadlocks](/2013/01/03/deadlocks-1/) please.
 
 
 

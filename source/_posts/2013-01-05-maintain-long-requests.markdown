@@ -8,7 +8,7 @@ categories:
 
 Previous chapters in this series were about [fighting with overloads inside system](/2013/01/01/overload-protection-1/), 
 [dropping requests that will overload system](/2013/01/02/overload-protection-2/),
-[dealing with consequences of our measures](/2013/01/03/deadlocks 1/),
+[dealing with consequences of our measures](/2013/01/03/deadlocks-1/),
 [making system less tied and faster](/2013/01/04/unobtrusive-read/).
 
 This last chapter will be about maintaining long user requests.
