@@ -9,9 +9,8 @@
   <meta name="author" content="Max Lapshin">
 
   
-  <meta name="description" content="Previous chapters in this series were about fighting with overloads inside system,
-dropping requests that will overload system,
-dealing with &hellip;">
+  <meta name="description" content="Erlyvideo has an ability to write video stream on disk. Video is written in small video chunks, convenient to serve via nginx or varnish.
+User can &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +66,57 @@ dealing with &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2013/01/14/long-coldstart/">Long Coldstart</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-14T17:46:00+04:00" pubdate data-updated="true">Jan 14<span>th</span>, 2013</time>
+        
+         | <a href="/2013/01/14/long-coldstart/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Erlyvideo has an ability to write video stream on disk. Video is written in small video chunks, convenient to serve via nginx or varnish.
+User can request long video from moment T1 to moment T2 and erlyvideo need to take a look at list of chunks to calculate reply.</p>
+
+<p>So was decided to keep list of chunks in memory and maintain it while new video is written and old video is deleted. Number of chunks may
+be impressive: up to several hundreds of thousands.</p>
+
+<p>So we get a problem of cold start: erlyvideo has to load list of chunks from disk. Usually it is rather fast, because chunks are
+laying in nested directories and large amount is not a big problem for modern hardware, but even on fast server it can take several
+seconds to scan all chunks. How to build system that will not freeze on start?</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2013/01/14/long-coldstart/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
   
   
     <article>
@@ -342,6 +392,10 @@ survive load spikes and performance failures.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/2013/01/14/long-coldstart/">Long coldstart</a>
+      </li>
+    
+      <li class="post">
         <a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a>
       </li>
     
@@ -355,10 +409,6 @@ survive load spikes and performance failures.</p>
     
       <li class="post">
         <a href="/2013/01/02/overload-protection-2/">Overload protection 2</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2013/01/01/overload-protection-1/">Overload protection 1</a>
       </li>
     
   </ul>

@@ -1,0 +1,396 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Long coldstart - Erlyvideo blog</title>
+  <meta name="author" content="Max Lapshin">
+
+  
+  <meta name="description" content="Erlyvideo has an ability to write video stream on disk. Video is written in small video chunks, convenient to serve via nginx or varnish.
+User can &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://blog.erlyvideo.org/2013/01/14/long-coldstart/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="/atom.xml" rel="alternate" title="Erlyvideo blog" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Erlyvideo blog</a></h1>
+  
+    <h2>Videostreaming in Erlang</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:blog.erlyvideo.org" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <!-- <li><a href="/blog/archives">Archives</a></li> -->
+  <li><a href="http://erlyvideo.org/">Erlyvideo</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Long Coldstart</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-14T17:46:00+04:00" pubdate data-updated="true">Jan 14<span>th</span>, 2013</time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Erlyvideo has an ability to write video stream on disk. Video is written in small video chunks, convenient to serve via nginx or varnish.
+User can request long video from moment T1 to moment T2 and erlyvideo need to take a look at list of chunks to calculate reply.</p>
+
+<p>So was decided to keep list of chunks in memory and maintain it while new video is written and old video is deleted. Number of chunks may
+be impressive: up to several hundreds of thousands.</p>
+
+<p>So we get a problem of cold start: erlyvideo has to load list of chunks from disk. Usually it is rather fast, because chunks are
+laying in nested directories and large amount is not a big problem for modern hardware, but even on fast server it can take several
+seconds to scan all chunks. How to build system that will not freeze on start?</p>
+
+<!-- more -->
+
+
+<p>Freezing on start is not just a service degradation, it may lead to restart loop: neighbour is requesting something from archive process,
+but archive process is busy and neighbour dies with timeout. Supervisor kills them all and restarts. It can become an endless loop,
+that will never give up because you have setup monit that will restart everything.</p>
+
+<p>Let&#8217;s discuss some tips to make workaround for this.</p>
+
+<h2>Make coldstart fast</h2>
+
+<p>It is a good advice just like &#8220;write fast code&#8221;. For example, it is possible to add chunk index and it is a very interesting task, because
+dets is a bad storage for such information and other database engines require to manage some NIF or drivers across all OS where erlyvideo
+should be installed. But you may experience other situation when you cannot just put index on disk, but need to download some
+data from the network or collect required information via some other ways.</p>
+
+<p>I can give you advice to plan your real requirements. Don&#8217;t build system for 500 millions of users if you will have only 500 of them.
+For example I have rewritten erlyvideo archive scan code from os:wildcard to direct prim_file usage and scan time lowered from 60 seconds to 5.</p>
+
+<p>5 seconds downtime of archive on startup satisfy me. But things always go wrong and something breaks. 5 seconds can raise back to 120 seconds
+and freeze whole system. Let&#8217;s think how to deal with it.</p>
+
+<h2>Delayed startup</h2>
+
+<p>First I advise to move such cold load functions to separate process. Separate process is easy to monitor and kill. You can always
+introspect it and look how many resources does it consume. Also remember that building of initial data can involve generation of large
+amount of temporary objects and it may be easier for system to drop whole process heap rather than garbage collect some long-living process.</p>
+
+<p>Ets may be a good way to communicate between service process (that requires initial data) and loader. You can even add some incremental loading.
+For example archive in erlyvideo is loaded to shared ets table from the newest chunks to ancient. So early users may use this service before all initialization is done. If your service is a cache server, than you may start serving already indexed data from cache.</p>
+
+<p>If initial data cannot be split into chunks, you can use another tip: delayed reply. I really don&#8217;t advice you to make such a process
+that is waiting in blocking call to loader. Launch loader, wait for its status via handle_info and accept all incoming requests via
+handle_call. If request is done before all data is loaded, than use following code:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="nf">handle_call</span><span class="p">({</span><span class="n">request</span><span class="p">,</span> <span class="nv">Request</span><span class="p">},</span> <span class="nv">From</span><span class="p">,</span> <span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="nv">Delayed</span><span class="p">}</span> <span class="o">=</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="nv">State</span><span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="p">[{</span><span class="nv">From</span><span class="p">,</span><span class="nv">Request</span><span class="p">}|</span><span class="nv">Delayed</span><span class="p">]}};</span>
+</span><span class='line'><span class="p">....</span>
+</span><span class='line'>
+</span><span class='line'><span class="nf">handle_info</span><span class="p">({</span><span class="n">data_loaded</span><span class="p">,</span> <span class="nv">Data</span><span class="p">},</span> <span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="nv">Delayed</span><span class="p">}</span> <span class="o">=</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">[</span><span class="nn">gen_server</span><span class="p">:</span><span class="nf">reply</span><span class="p">(</span><span class="nv">From</span><span class="p">,</span> <span class="n">response</span><span class="p">(</span><span class="nv">Data</span><span class="p">,</span> <span class="nv">Request</span><span class="p">))</span> <span class="p">||</span> <span class="p">{</span><span class="nv">From</span><span class="p">,</span> <span class="nv">Request</span><span class="p">}</span> <span class="o">&lt;-</span> <span class="nv">Delayed</span><span class="p">],</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="nv">State</span><span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="p">[],</span> <span class="n">data</span> <span class="o">=</span> <span class="nv">Data</span><span class="p">}},</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Doing things this way you should remember that default gen_server:call timeout is only 5 seconds.</p>
+
+<h2>Conclusion</h2>
+
+<p>Your system may require some initial data loading. Please, make your system more responsive while doing it. Extract loading to separate process,
+try to serve clients somehow before all initialization is done and delay responses until required data is loaded.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Max Lapshin</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-14T17:46:00+04:00" pubdate data-updated="true">Jan 14<span>th</span>, 2013</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://blog.erlyvideo.org/2013/01/14/long-coldstart/" data-via="erlyvideo" data-counturl="http://blog.erlyvideo.org/2013/01/14/long-coldstart/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/2013/01/05/maintain-long-requests/" title="Previous Post: Maintain long requests">&laquo; Maintain long requests</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/2013/01/14/long-coldstart/">Long coldstart</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/05/maintain-long-requests/">Maintain long requests</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/04/unobtrusive-read/">Unobtrusive read</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/03/deadlocks-1/">Deadlocks 1</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2013/01/02/overload-protection-2/">Overload protection 2</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/erlyvideo">@erlyvideo</a> on GitHub
+  
+  <script type="text/javascript">
+    $.domReady(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'erlyvideo',
+            count: 0,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("erlyvideo", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/erlyvideo" class="twitter-follow-button" data-show-count="false">Follow @erlyvideo</a>
+  
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2013 - Max Lapshin -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+(function (d, w, c) {
+    (w[c] = w[c] || []).push(function() {
+        try {
+            w.yaCounter2106928 = new Ya.Metrika({id:2106928, enableAll: true});
+        } catch(e) {}
+    });
+
+    var n = d.getElementsByTagName("script")[0],
+        s = d.createElement("script"),
+        f = function () { n.parentNode.insertBefore(s, n); };
+    s.type = "text/javascript";
+    s.async = true;
+    s.src = (d.location.protocol == "https:" ? "https:" : "http:") + "//mc.yandex.ru/metrika/watch.js";
+
+    if (w.opera == "[object Opera]") {
+        d.addEventListener("DOMContentLoaded", f);
+    } else { f(); }
+})(document, window, "yandex_metrika_callbacks");
+</script>
+<noscript><div><img src="//mc.yandex.ru/watch/2106928" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'erlyvideo';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://blog.erlyvideo.org/2013/01/14/long-coldstart/';
+        var disqus_url = 'http://blog.erlyvideo.org/2013/01/14/long-coldstart/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

@@ -4,7 +4,7 @@
   <title><![CDATA[Erlyvideo blog]]></title>
   <link href="http://blog.erlyvideo.org/atom.xml" rel="self"/>
   <link href="http://blog.erlyvideo.org/"/>
-  <updated>2013-01-14T15:41:31+04:00</updated>
+  <updated>2013-01-15T01:08:43+04:00</updated>
   <id>http://blog.erlyvideo.org/</id>
   <author>
     <name><![CDATA[Max Lapshin]]></name>
@@ -12,6 +12,82 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Long coldstart]]></title>
+    <link href="http://blog.erlyvideo.org/2013/01/14/long-coldstart/"/>
+    <updated>2013-01-14T17:46:00+04:00</updated>
+    <id>http://blog.erlyvideo.org/2013/01/14/long-coldstart</id>
+    <content type="html"><![CDATA[<p>Erlyvideo has an ability to write video stream on disk. Video is written in small video chunks, convenient to serve via nginx or varnish.
+User can request long video from moment T1 to moment T2 and erlyvideo need to take a look at list of chunks to calculate reply.</p>
+
+<p>So was decided to keep list of chunks in memory and maintain it while new video is written and old video is deleted. Number of chunks may
+be impressive: up to several hundreds of thousands.</p>
+
+<p>So we get a problem of cold start: erlyvideo has to load list of chunks from disk. Usually it is rather fast, because chunks are
+laying in nested directories and large amount is not a big problem for modern hardware, but even on fast server it can take several
+seconds to scan all chunks. How to build system that will not freeze on start?</p>
+
+<!-- more -->
+
+
+<p>Freezing on start is not just a service degradation, it may lead to restart loop: neighbour is requesting something from archive process,
+but archive process is busy and neighbour dies with timeout. Supervisor kills them all and restarts. It can become an endless loop,
+that will never give up because you have setup monit that will restart everything.</p>
+
+<p>Let&#8217;s discuss some tips to make workaround for this.</p>
+
+<h2>Make coldstart fast</h2>
+
+<p>It is a good advice just like &#8220;write fast code&#8221;. For example, it is possible to add chunk index and it is a very interesting task, because
+dets is a bad storage for such information and other database engines require to manage some NIF or drivers across all OS where erlyvideo
+should be installed. But you may experience other situation when you cannot just put index on disk, but need to download some
+data from the network or collect required information via some other ways.</p>
+
+<p>I can give you advice to plan your real requirements. Don&#8217;t build system for 500 millions of users if you will have only 500 of them.
+For example I have rewritten erlyvideo archive scan code from os:wildcard to direct prim_file usage and scan time lowered from 60 seconds to 5.</p>
+
+<p>5 seconds downtime of archive on startup satisfy me. But things always go wrong and something breaks. 5 seconds can raise back to 120 seconds
+and freeze whole system. Let&#8217;s think how to deal with it.</p>
+
+<h2>Delayed startup</h2>
+
+<p>First I advise to move such cold load functions to separate process. Separate process is easy to monitor and kill. You can always
+introspect it and look how many resources does it consume. Also remember that building of initial data can involve generation of large
+amount of temporary objects and it may be easier for system to drop whole process heap rather than garbage collect some long-living process.</p>
+
+<p>Ets may be a good way to communicate between service process (that requires initial data) and loader. You can even add some incremental loading.
+For example archive in erlyvideo is loaded to shared ets table from the newest chunks to ancient. So early users may use this service before all initialization is done. If your service is a cache server, than you may start serving already indexed data from cache.</p>
+
+<p>If initial data cannot be split into chunks, you can use another tip: delayed reply. I really don&#8217;t advice you to make such a process
+that is waiting in blocking call to loader. Launch loader, wait for its status via handle_info and accept all incoming requests via
+handle_call. If request is done before all data is loaded, than use following code:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="nf">handle_call</span><span class="p">({</span><span class="n">request</span><span class="p">,</span> <span class="nv">Request</span><span class="p">},</span> <span class="nv">From</span><span class="p">,</span> <span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="nv">Delayed</span><span class="p">}</span> <span class="o">=</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="nv">State</span><span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="p">[{</span><span class="nv">From</span><span class="p">,</span><span class="nv">Request</span><span class="p">}|</span><span class="nv">Delayed</span><span class="p">]}};</span>
+</span><span class='line'><span class="p">....</span>
+</span><span class='line'>
+</span><span class='line'><span class="nf">handle_info</span><span class="p">({</span><span class="n">data_loaded</span><span class="p">,</span> <span class="nv">Data</span><span class="p">},</span> <span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="nv">Delayed</span><span class="p">}</span> <span class="o">=</span> <span class="nv">State</span><span class="p">)</span> <span class="o">-&gt;</span>
+</span><span class='line'>  <span class="p">[</span><span class="nn">gen_server</span><span class="p">:</span><span class="nf">reply</span><span class="p">(</span><span class="nv">From</span><span class="p">,</span> <span class="n">response</span><span class="p">(</span><span class="nv">Data</span><span class="p">,</span> <span class="nv">Request</span><span class="p">))</span> <span class="p">||</span> <span class="p">{</span><span class="nv">From</span><span class="p">,</span> <span class="nv">Request</span><span class="p">}</span> <span class="o">&lt;-</span> <span class="nv">Delayed</span><span class="p">],</span>
+</span><span class='line'>  <span class="p">{</span><span class="n">noreply</span><span class="p">,</span> <span class="nv">State</span><span class="nl">#state</span><span class="p">{</span><span class="n">delayed</span> <span class="o">=</span> <span class="p">[],</span> <span class="n">data</span> <span class="o">=</span> <span class="nv">Data</span><span class="p">}},</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Doing things this way you should remember that default gen_server:call timeout is only 5 seconds.</p>
+
+<h2>Conclusion</h2>
+
+<p>Your system may require some initial data loading. Please, make your system more responsive while doing it. Extract loading to separate process,
+try to serve clients somehow before all initialization is done and delay responses until required data is loaded.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Maintain long requests]]></title>
