@@ -125,6 +125,10 @@ ets table doesn&#8217;t block your process. Gproc has ability to lock caller unt
 <p>Erlyvideo can serve stream as MPEG-TS. Client will teardown connection if no data is sent and this is why I had to use other approach:
 read in loop key from ets packet and if no key available, send null keepalive packet if no data available and sleep for one second.</p>
 
+<p>You should remember that storing data in ets requires you to control resources and cleanup them manually: some external process should keep
+ets table in its property and monitor your server process, removing all connected data on its death. Mention post by Steeve Vinoski
+about <a href="http://steve.vinoski.net/blog/2011/03/23/dont-lose-your-ets-tables/">not loosing ets tables</a> if controlling process dies.</p>
+
 <p>You should choose the way that better fits your requirements, but please, choose easiest one.</p>
 
 <h2>Reading from process dictionary</h2>
@@ -172,7 +176,24 @@ Especially it can block while writing archive on disk. This is why it happened t
 <p>This tricky code will give you more informative stacktraces in logs that will tell you that source cannot publish frames to stream because stream
 is blocked in status <code>write_frame_on_disk</code> and you should do something with it.</p>
 
-<p>Main idea of this capter is: block if you need other process to modify required data but don&#8217;t touch remote process at all if you need &#8220;just ask for existing data&#8221;. Mention that this method behaves badly if data does not exists. It works for already existing data.</p>
+<p>OTP has two similar features: <code>current_function</code> and <code>initial_function</code>:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='erlang'><span class='line'><span class="o">&gt;</span> <span class="nb">process_info</span><span class="p">(</span><span class="n">pid</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">1875</span><span class="p">,</span><span class="mi">0</span><span class="p">)).</span>
+</span><span class='line'><span class="p">[{</span><span class="n">current_function</span><span class="p">,{</span><span class="n">gen_server</span><span class="p">,</span><span class="n">loop</span><span class="p">,</span><span class="mi">6</span><span class="p">}},</span>
+</span><span class='line'> <span class="p">{</span><span class="n">initial_call</span><span class="p">,{</span><span class="n">proc_lib</span><span class="p">,</span><span class="n">init_p</span><span class="p">,</span><span class="mi">5</span><span class="p">}},</span>
+</span><span class='line'> <span class="p">{</span><span class="n">status</span><span class="p">,</span><span class="n">waiting</span><span class="p">},</span>
+</span><span class='line'> <span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>They are more helpful than lack of them, but how can you understand what process it is by this dump?</p>
+
+<p>Main idea of this chapter is: block if you need other process to modify required data but don&#8217;t touch remote process at all if you need &#8220;just ask for existing data&#8221;. Mention that this method behaves badly if data does not exists. It works for already existing data.</p>
 
 <p>Last chapter of this series will be devoted to <a href="/2013/01/05/maintain-long-requests/">maintaining long user requests</a></p>
 </div>
